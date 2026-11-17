@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>후보자 현황 · 지사 포털</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* 보기(탭) 바 */
+    .sheets { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .sheet-tab { border: 1px solid var(--line-2); background: #fff; color: var(--text-mute); border-radius: 10px 10px 0 0; padding: 8px 20px; font-size: 0.92rem; font-weight: 700; font-family: inherit; cursor: pointer; }
+    .sheet-tab.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    .toolbar .filter { flex: 1; min-width: 160px; max-width: 320px; border: 1.5px solid var(--line-2); border-radius: 10px; padding: 9px 12px; font-size: 0.92rem; font-family: inherit; }
+    .toolbar .filter:focus { outline: none; border-color: var(--brand); }
+    .saveinfo { color: var(--text-mute); font-size: 0.8rem; white-space: nowrap; }
+    .saveinfo.dirty { color: var(--brand-dk); font-weight: 700; }
+    .zoomctl { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line-2); border-radius: 10px; padding: 2px 4px; }
+    .zoomctl button { border: none; background: none; cursor: pointer; font-size: 1.1rem; font-weight: 800; color: var(--brand-dk); width: 28px; height: 28px; border-radius: 7px; line-height: 1; }
+    .zoomctl button:hover { background: #fff1e6; }
+    .zoomctl span { font-size: 0.8rem; color: var(--text-mute); min-width: 42px; text-align: center; }
+
+    .tablewrap { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-sm); overflow: auto; max-height: calc(100vh - 270px); }
+    table.cand { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.86rem; }
+    table.cand th, table.cand td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 0; white-space: nowrap; }
+    table.cand thead th {
+      position: sticky; top: 0; z-index: 3; background: #f3f5f8; color: var(--text);
+      font-weight: 700; font-size: 0.8rem; padding: 9px 8px; text-align: center; vertical-align: middle;
+    }
+    table.cand th.c-no, table.cand td.c-no { position: sticky; left: 0; z-index: 2; background: #fafbfc; width: 38px; text-align: center; color: var(--text-mute); }
+    table.cand thead th.c-no { z-index: 4; }
+    table.cand th.c-name, table.cand td.c-name { position: sticky; left: 38px; z-index: 2; background: var(--surface); min-width: 96px; }
+    table.cand thead th.c-name { z-index: 4; background: #f3f5f8; }
+    table.cand td.cell { text-align: center; min-width: 56px; }
+
+    .cellin { display: block; min-height: 34px; line-height: 34px; padding: 0 8px; text-align: center; outline: none; cursor: text; }
+    .c-name .cellin { text-align: left; font-weight: 600; cursor: text; }
+    .cellin:focus { background: #fff7ef; box-shadow: inset 0 0 0 2px var(--brand); border-radius: 6px; }
+    td.v-y .cellin   { background: #e7f6ec; color: #157a3c; font-weight: 700; }
+    td.v-x .cellin   { color: #b6bcc6; }
+    td.v-date .cellin{ background: #eaf1fe; color: #2155c4; font-weight: 600; }
+    td.v-zero .cellin{ color: #d3d8e0; }
+
+    tr.sec td { background: #fff3e9; color: var(--brand-dk); font-weight: 800; font-size: 0.82rem; padding: 7px 12px; position: sticky; left: 0; }
+    tr.sec td .addrow { float: right; background: var(--brand); color: #fff; border: none; border-radius: 7px; font-size: 0.74rem; font-weight: 700; padding: 3px 9px; cursor: pointer; }
+    tr.sec td .seccount { font-weight: 600; color: var(--text-mute); font-size: 0.76rem; margin-left: 8px; }
+    tr.sec td .secbtn { background: none; border: none; cursor: pointer; font-size: 0.82rem; margin-left: 5px; opacity: 0.65; }
+    tr.sec td .secbtn:hover { opacity: 1; }
+
+    .rowdel { background: none; border: none; cursor: pointer; opacity: 0.55; font-size: 0.9rem; padding: 0 4px; }
+    tr:hover .rowdel { opacity: 1; }
+
+    th.colh .colname { display: inline-block; min-width: 36px; outline: none; }
+    th.colh .colname:focus { background: #fff7ef; box-shadow: inset 0 0 0 2px var(--brand); border-radius: 6px; }
+    th.colh .coltools { display: block; margin-top: 3px; white-space: nowrap; }
+    th.colh .coldel { border: none; background: none; color: #c2c8d2; cursor: pointer; font-size: 1.05rem; line-height: 1; margin-left: 3px; padding: 0 2px; vertical-align: middle; }
+    th.colh .coldel:hover { color: var(--neg); }
+    th.colh .colmove { border: none; background: none; cursor: pointer; color: #9aa3b2; font-size: 0.74rem; line-height: 1; padding: 0 1px; vertical-align: middle; }
+    th.colh .colmove:hover { color: var(--brand-dk); }
+    th.actcol, td.rowact { width: 64px; }
+    td.rowact { white-space: nowrap; text-align: center; }
+    /* 드래그 이동 */
+    .drag { cursor: grab; color: #aeb4c0; font-size: 1.05rem; padding: 0 5px; user-select: none; }
+    .drag:hover { color: var(--brand-dk); }
+    .drag:active { cursor: grabbing; }
+    tr.dragging { opacity: 0.35; }
+    tr.drop-before td { box-shadow: inset 0 2px 0 0 var(--brand); }
+    tr.drop-after td { box-shadow: inset 0 -2px 0 0 var(--brand); }
+    tr.sec.drop-into td { outline: 2px dashed var(--brand); outline-offset: -2px; }
+
+    .hidden-row { display: none; }
+    .hint { color: var(--text-mute); font-size: 0.8rem; margin-top: 10px; line-height: 1.7; }
+    .legend { display: inline-flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-left: auto; font-size: 0.78rem; color: var(--text-mute); }
+    .legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .legend i { width: 13px; height: 13px; border-radius: 4px; display: inline-block; }
+  </style>
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="candidates"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div>
+          <h1>후보자 현황</h1>
+          <div class="sub">같은 명단 · 보는 방법만 다름 (전체명단 / 직급별)</div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="btn btn-ghost" id="reloadBtn">↻ 새로고침</button>
+        <button class="btn btn-brand" id="saveBtn">💾 저장</button>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="sheets" id="sheets"></div>
+
+      <div class="toolbar">
+        <input class="filter" id="filter" placeholder="🔍 이름 검색" />
+        <button class="btn btn-ghost" id="addColBtn">＋ 항목(열) 추가</button>
+        <button class="btn btn-ghost" id="addSecBtn">＋ 구분 추가</button>
+        <span class="zoomctl"><button id="zoomOut" title="축소">－</button><span id="zoomLabel">100%</span><button id="zoomIn" title="확대">＋</button></span>
+        <span class="saveinfo" id="saveInfo">불러오는 중…</span>
+        <span class="legend">
+          <span><i style="background:#e7f6ec"></i>완료(Y)</span>
+          <span><i style="background:#eaf1fe"></i>날짜/예정</span>
+          <span><i style="background:#f1f3f6"></i>해당없음(x)</span>
+        </span>
+      </div>
+
+      <div class="tablewrap">
+        <table class="cand" id="tbl">
+          <thead><tr id="headRow"></tr></thead>
+          <tbody id="body"></tbody>
+        </table>
+      </div>
+
+      <div class="hint">
+        · <b>탭 2개</b>: [전체명단]=등록상태로 묶어 보기 · [직급별]=직급으로 묶어 보기. <b>같은 사람·같은 정보</b>를 묶는 방식만 다르게 보여줘요. 한 곳에서 고치면 양쪽 다 바뀝니다.<br>
+        · <b>분류 바꾸기(드래그)</b>: 행 오른쪽 <b>⠿ 손잡이</b>를 잡고 끌어서 원하는 자리·구분으로 놓으면 돼요. 다른 구분으로 끌어다 놓으면 그 직급으로 <b>재분류</b>됩니다. (구분 제목 위에 놓으면 그 구분 맨 아래로)<br>
+        · 칸 클릭=값 입력(Y·x·0·날짜 자유). 항목(열): ＋추가 / 제목클릭=이름변경 / ×삭제 / ◀▶이동. 행: ＋행 추가 / 🗑삭제. 구분: ✏️이름변경 · 🗑삭제.<br>
+        · 입력 후 <b>💾 저장</b>해야 현재 브라우저에 반영. 남이 고친 건 <b>↻ 새로고침</b>으로 확인.
+      </div>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script>
+    const auth = JSON.parse(localStorage.getItem('hwAuth') || 'null');
+    const DEFAULT_COLS = ['오렌지트리','생보합격','손보합격','연수원 수료','보증보험 사전동의','이클린','다위촉','한생등록','동양&라이나','손보코드이관','변액'];
+
+    // ── 원본(엑셀 위촉현황) = 사람 한 벌. 등록상태별로 그룹 ──
+    const RAW = [['등록완료',[]],['위촉 진행',[]],['후보자명단',[]],['보류',[]]];
+
+    // 직급 초기 분류 (아는 것만; 나머지는 '인원' → 화면에서 ▲▼로 재분류)
+    const RANK_ORDER = ['관리자','세일즈매니저','세일즈코치','인플루언서','인원'];
+    const RANK_OF = { '병인':'관리자','채미':'관리자','동휘':'세일즈매니저','효은':'세일즈매니저','히르찬':'인플루언서' };
+
+    function buildSeed() {
+      const people = [];
+      const allView = [];
+      let pid = 0;
+      RAW.forEach(([g, rows]) => {
+        const members = [];
+        rows.forEach(([name, vals]) => {
+          const id = 'p' + (++pid);
+          people.push({ id, name, vals: vals.slice() });
+          members.push(id);
+        });
+        allView.push({ name: g, members });
+      });
+      const rankView = RANK_ORDER.map(n => ({ name: n, members: [] }));
+      people.forEach(p => {
+        const r = RANK_OF[p.name] || '인원';
+        (rankView.find(s => s.name === r) || rankView[rankView.length-1]).members.push(p.id);
+      });
+      return { cols: DEFAULT_COLS.slice(), people, views: { all: allView, rank: rankView }, active: 'all' };
+    }
+
+    let state = null;
+    let dirty = false;
+    const TAB_LABEL = { all: '전체명단', rank: '직급별' };
+    const curView = () => state.views[state.active];
+    const otherKey = () => (state.active === 'all' ? 'rank' : 'all');
+    const personById = id => state.people.find(p => p.id === id);
+    function newId() { return 'p' + Date.now().toString(36) + Math.floor(Math.random()*1e4).toString(36); }
+
+    const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const saveInfo = document.getElementById('saveInfo');
+
+    function valClass(v) {
+      const t = String(v == null ? '' : v).trim();
+      if (t === '') return '';
+      if (t === '0') return 'v-zero';
+      if (/^y$/i.test(t)) return 'v-y';
+      if (/^x$/i.test(t)) return 'v-x';
+      return 'v-date';
+    }
+    function setDirty(on) {
+      dirty = on;
+      if (on) { saveInfo.textContent = '● 변경됨 — 저장 필요'; saveInfo.classList.add('dirty'); }
+    }
+    function ensureLen(vals) {
+      const n = state ? state.cols.length : DEFAULT_COLS.length;
+      vals = Array.isArray(vals) ? vals.slice() : [];
+      while (vals.length < n) vals.push('');
+      return vals.slice(0, n);
+    }
+
+    function renderTabs() {
+      document.getElementById('sheets').innerHTML = ['all','rank'].map(k =>
+        `<button class="sheet-tab${state.active === k ? ' active' : ''}" data-v="${k}">${TAB_LABEL[k]}</button>`
+      ).join('');
+    }
+
+    function render() {
+      renderTabs();
+      const cols = state.cols, view = curView();
+      document.getElementById('headRow').innerHTML =
+        '<th class="c-no">No</th><th class="c-name">이름</th>' +
+        cols.map((c, ci) => `<th class="colh"><span class="colname" contenteditable="true" data-col="${ci}">${esc(c)}</span>`
+          + `<span class="coltools">`
+          + `<button class="colmove" data-col="${ci}" data-dir="-1" title="왼쪽으로 이동">◀</button>`
+          + `<button class="colmove" data-col="${ci}" data-dir="1" title="오른쪽으로 이동">▶</button>`
+          + `<button class="coldel" data-col="${ci}" title="이 항목(열) 삭제">×</button>`
+          + `</span></th>`).join('') +
+        '<th class="actcol"></th>';
+
+      let html = '', counter = 0;
+      view.forEach((sec, si) => {
+        html += `<tr class="sec" data-si="${si}"><td colspan="${cols.length + 3}">${esc(sec.name)}`
+              + `<span class="seccount">${sec.members.length}명</span>`
+              + `<button class="addrow" data-si="${si}">＋ 행 추가</button>`
+              + `<button class="secbtn secren" data-si="${si}" title="구분 이름 변경">✏️</button>`
+              + `<button class="secbtn secdel" data-si="${si}" title="구분 삭제">🗑</button></td></tr>`;
+        sec.members.forEach((id, mi) => {
+          const p = personById(id);
+          if (!p) return;
+          counter++;
+          const vals = ensureLen(p.vals);
+          html += `<tr data-id="${id}" data-si="${si}" data-mi="${mi}">`
+                + `<td class="c-no">${counter}</td>`
+                + `<td class="c-name"><span class="cellin" contenteditable="true" data-f="name">${esc(p.name)}</span></td>`
+                + vals.map((v, ci) => `<td class="cell ${valClass(v)}"><span class="cellin" contenteditable="true" data-f="${ci}">${esc(v)}</span></td>`).join('')
+                + `<td class="rowact">`
+                + `<span class="drag" title="드래그로 이동/재분류">⠿</span>`
+                + `<button class="rowdel" title="행 삭제">🗑</button></td>`
+                + `</tr>`;
+        });
+      });
+      document.getElementById('body').innerHTML = html;
+      applyFilter();
+    }
+
+    // 탭 전환
+    document.getElementById('sheets').addEventListener('click', e => {
+      const tab = e.target.closest('.sheet-tab');
+      if (!tab) return;
+      state.active = tab.dataset.v; render();
+    });
+
+    // 칸 입력 → 사람(공유) 정보 수정 → 양쪽 탭 동일 반영
+    document.getElementById('body').addEventListener('input', e => {
+      const cell = e.target.closest('.cellin');
+      if (!cell) return;
+      const tr = cell.closest('tr[data-id]');
+      if (!tr) return;
+      const p = personById(tr.dataset.id);
+      if (!p) return;
+      const f = cell.dataset.f, txt = cell.textContent;
+      if (f === 'name') { p.name = txt; }
+      else { p.vals = ensureLen(p.vals); p.vals[+f] = txt; cell.closest('td').className = 'cell ' + valClass(txt); }
+      setDirty(true);
+    });
+
+    // 행 추가 / 이동(경계 넘으면 재분류) / 삭제 + 구분 이름변경 / 삭제
+    document.getElementById('body').addEventListener('click', e => {
+      const add = e.target.closest('.addrow');
+      if (add) {
+        const si = +add.dataset.si, id = newId();
+        state.people.push({ id, name: '', vals: [] });
+        curView()[si].members.push(id);
+        const ov = state.views[otherKey()];
+        ov[ov.length - 1].members.push(id);   // 다른 탭에선 맨 끝 구분에 들어감(이동해서 분류)
+        setDirty(true); render(); return;
+      }
+      const del = e.target.closest('.rowdel');
+      if (del) {
+        const id = del.closest('tr[data-id]').dataset.id, p = personById(id);
+        if (!confirm(`'${(p && p.name) || '이 행'}' 을(를) 명단에서 완전히 삭제할까요? (두 탭 모두에서 사라져요)`)) return;
+        state.people = state.people.filter(x => x.id !== id);
+        ['all','rank'].forEach(k => state.views[k].forEach(s => { s.members = s.members.filter(m => m !== id); }));
+        setDirty(true); render(); return;
+      }
+      const ren = e.target.closest('.secren');
+      if (ren) {
+        const si = +ren.dataset.si, nv = prompt('구분 이름 변경', curView()[si].name);
+        if (nv == null || nv.trim() === '') return;
+        curView()[si].name = nv.trim(); setDirty(true); render(); return;
+      }
+      const sdel = e.target.closest('.secdel');
+      if (sdel) {
+        const si = +sdel.dataset.si, secs = curView(), sec = secs[si];
+        if (secs.length <= 1) { alert('마지막 구분은 삭제할 수 없어요.'); return; }
+        if (!confirm(`구분 '${sec.name}'을(를) 삭제할까요? 안의 ${sec.members.length}명은 '${(si===0?secs[1]:secs[0]).name}' 구분으로 옮겨져요. (사람은 안 지워짐)`)) return;
+        const target = si === 0 ? secs[1] : secs[0];
+        target.members.push(...sec.members);
+        secs.splice(si, 1); setDirty(true); render();
+      }
+    });
+
+    // ── 드래그로 이동/재분류 ──
+    let dragId = null, dropTarget = null;
+    const bodyEl = document.getElementById('body');
+    function clearDropMarks() {
+      bodyEl.querySelectorAll('.drop-before,.drop-after,.drop-into').forEach(el => el.classList.remove('drop-before','drop-after','drop-into'));
+    }
+    // 손잡이를 잡았을 때만 행을 draggable로 (셀 편집과 충돌 방지)
+    bodyEl.addEventListener('mousedown', e => {
+      const h = e.target.closest('.drag'), tr = e.target.closest('tr[data-id]');
+      if (h && tr) tr.setAttribute('draggable', 'true');
+    });
+    bodyEl.addEventListener('dragstart', e => {
+      const tr = e.target.closest('tr[data-id]');
+      if (!tr || tr.getAttribute('draggable') !== 'true') { e.preventDefault(); return; }
+      dragId = tr.dataset.id; dropTarget = null;
+      tr.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', dragId); } catch (_) {}
+    });
+    bodyEl.addEventListener('dragover', e => {
+      if (!dragId) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      clearDropMarks();
+      const overTr = e.target.closest('tr[data-id]');
+      const overSec = e.target.closest('tr.sec');
+      if (overTr) {
+        const r = overTr.getBoundingClientRect();
+        const after = (e.clientY - r.top) > r.height / 2;
+        overTr.classList.add(after ? 'drop-after' : 'drop-before');
+        dropTarget = { type: 'row', si: +overTr.dataset.si, mi: +overTr.dataset.mi, after };
+      } else if (overSec) {
+        overSec.classList.add('drop-into');
+        dropTarget = { type: 'sec', si: +overSec.dataset.si };
+      }
+    });
+    bodyEl.addEventListener('drop', e => {
+      if (!dragId || !dropTarget) return;
+      e.preventDefault();
+      const view = curView();
+      let from = null;
+      view.forEach((s, sidx) => { const idx = s.members.indexOf(dragId); if (idx >= 0) from = { sidx, idx }; });
+      if (!from) { dragId = null; return; }
+      view[from.sidx].members.splice(from.idx, 1);
+      const tSi = dropTarget.si, sec = view[tSi];
+      let at;
+      if (dropTarget.type === 'sec') at = sec.members.length;
+      else {
+        let base = dropTarget.mi;
+        if (from.sidx === tSi && from.idx < dropTarget.mi) base -= 1; // 같은 구분서 앞을 빼면 인덱스 당겨짐
+        at = base + (dropTarget.after ? 1 : 0);
+      }
+      at = Math.max(0, Math.min(at, sec.members.length));
+      sec.members.splice(at, 0, dragId);
+      dragId = null; dropTarget = null;
+      setDirty(true); render();
+    });
+    bodyEl.addEventListener('dragend', () => {
+      const d = bodyEl.querySelector('tr.dragging'); if (d) { d.removeAttribute('draggable'); d.classList.remove('dragging'); }
+      clearDropMarks(); dragId = null; dropTarget = null;
+    });
+
+    // 열 이름 변경 / 좌우 이동 / 삭제
+    document.getElementById('headRow').addEventListener('input', e => {
+      const c = e.target.closest('.colname');
+      if (!c) return;
+      state.cols[+c.dataset.col] = c.textContent; setDirty(true);
+    });
+    document.getElementById('headRow').addEventListener('click', e => {
+      const cm = e.target.closest('.colmove');
+      if (cm) {
+        const ci = +cm.dataset.col, dir = +cm.dataset.dir, j = ci + dir;
+        if (j < 0 || j >= state.cols.length) return;
+        const t = state.cols[ci]; state.cols[ci] = state.cols[j]; state.cols[j] = t;
+        state.people.forEach(p => { p.vals = ensureLen(p.vals); const v = p.vals[ci]; p.vals[ci] = p.vals[j]; p.vals[j] = v; });
+        setDirty(true); render(); return;
+      }
+      const cd = e.target.closest('.coldel');
+      if (!cd) return;
+      const ci = +cd.dataset.col, name = state.cols[ci] || '이 항목';
+      if (!confirm(`항목(열) '${name}'을(를) 삭제할까요? 모든 사람의 이 칸 값이 함께 지워져요.`)) return;
+      const oldLen = state.cols.length;
+      state.people.forEach(p => { p.vals = ensureLen(p.vals); while (p.vals.length < oldLen) p.vals.push(''); p.vals.splice(ci, 1); });
+      state.cols.splice(ci, 1); setDirty(true); render();
+    });
+
+    document.getElementById('addColBtn').addEventListener('click', () => {
+      const name = prompt('새 항목(열) 이름', '');
+      if (name == null || name.trim() === '') return;
+      state.cols.push(name.trim());
+      state.people.forEach(p => { p.vals = ensureLen(p.vals); });
+      setDirty(true); render();
+    });
+    document.getElementById('addSecBtn').addEventListener('click', () => {
+      const name = prompt(`새 구분 이름 ([${TAB_LABEL[state.active]}] 탭에 추가)`, '');
+      if (name == null || name.trim() === '') return;
+      curView().push({ name: name.trim(), members: [] }); setDirty(true); render();
+    });
+
+    function applyFilter() {
+      const q = document.getElementById('filter').value.trim().toLowerCase();
+      document.querySelectorAll('#body tr[data-id]').forEach(tr => {
+        if (!q) { tr.classList.remove('hidden-row'); return; }
+        const nm = (tr.querySelector('.c-name .cellin')?.textContent || '').toLowerCase();
+        tr.classList.toggle('hidden-row', !nm.includes(q));
+      });
+    }
+    document.getElementById('filter').addEventListener('input', applyFilter);
+
+    function stamp(meta) {
+      if (meta && meta.updatedAt) {
+        const t = new Date(meta.updatedAt);
+        saveInfo.textContent = `저장됨 · ${t.getMonth()+1}.${t.getDate()} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}${meta.updatedBy ? ' · ' + meta.updatedBy : ''}`;
+      } else { saveInfo.textContent = '초기 데이터 (아직 저장 전)'; }
+      saveInfo.classList.remove('dirty');
+    }
+
+    function normalize(v) {
+      if (v && Array.isArray(v.people) && v.views && v.views.all && v.views.rank) {
+        if (!Array.isArray(v.cols)) v.cols = DEFAULT_COLS.slice();
+        if (v.active !== 'rank') v.active = 'all';
+        return v;
+      }
+      return null;  // 구버전/없음 → 시드
+    }
+
+    async function load() {
+      try {
+        const { data } = await SB.from('app_config').select('value').eq('key','candidates').maybeSingle();
+        const norm = data && normalize(data.value);
+        if (norm) { state = norm; dirty = false; render(); stamp(data.value); return; }
+      } catch (e) {}
+      state = buildSeed(); dirty = false; render(); stamp(null);
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true; btn.textContent = '저장 중…';
+      try {
+        const payload = { cols: state.cols, people: state.people, views: state.views, active: state.active, updatedAt: new Date().toISOString(), updatedBy: (auth && auth.name) || '관리자' };
+        const { error } = await SB.from('app_config').upsert({ key: 'candidates', value: payload, updated_at: new Date().toISOString() });
+        if (error) { alert('저장 실패: ' + error.message); return; }
+        dirty = false; stamp(payload);
+      } finally { btn.disabled = false; btn.textContent = '💾 저장'; }
+    });
+
+    document.getElementById('reloadBtn').addEventListener('click', () => {
+      if (dirty && !confirm('저장하지 않은 변경이 있어요. 새로고침하면 사라집니다. 계속할까요?')) return;
+      saveInfo.textContent = '불러오는 중…'; load();
+    });
+
+    window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+    // 표 확대/축소 (브라우저 새로고침해도 유지)
+    let zoom = Math.min(220, Math.max(60, parseInt(localStorage.getItem('candZoom') || '100', 10) || 100));
+    function applyZoom() {
+      const t = document.getElementById('tbl');
+      if (t) t.style.zoom = (zoom / 100);
+      document.getElementById('zoomLabel').textContent = zoom + '%';
+      localStorage.setItem('candZoom', String(zoom));
+    }
+    document.getElementById('zoomIn').addEventListener('click', () => { zoom = Math.min(220, zoom + 10); applyZoom(); });
+    document.getElementById('zoomOut').addEventListener('click', () => { zoom = Math.max(60, zoom - 10); applyZoom(); });
+    applyZoom();
+
+    load();
+  </script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

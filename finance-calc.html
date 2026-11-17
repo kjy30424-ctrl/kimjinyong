@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>재무 현황 계산기 · 지사 포털</title>
+  <script>
+    (function () {
+      var a = null;
+      try { a = JSON.parse(localStorage.getItem('hwAuth') || 'null'); } catch (e) {}
+      if (!a) { location.href = 'login.html'; }
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .note { background: var(--brand-sft); border: 1px solid #ffd9b8; border-radius: 12px; padding: 14px 18px; font-size: 0.88rem; color: #8a4b00; margin-bottom: 22px; }
+    .note b { color: var(--brand-dk); }
+
+    .inp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
+    .field label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-soft); margin-bottom: 7px; }
+    .field .in-wrap { position: relative; display: flex; align-items: center; }
+    .field input[type=number] {
+      width: 100%; padding: 10px 13px; border: 1.5px solid var(--line-2); border-radius: 10px;
+      font-size: 0.98rem; font-family: inherit; font-weight: 700; color: var(--text);
+      font-variant-numeric: tabular-nums; text-align: right;
+    }
+    .field input[type=number]:focus { outline: none; border-color: var(--brand); }
+    .field .unit { position: absolute; right: 13px; color: var(--text-mute); font-size: 0.85rem; font-weight: 600; pointer-events: none; }
+    .field input.has-unit { padding-right: 40px; }
+    .field .hint { font-size: 0.73rem; color: var(--text-mute); margin-top: 5px; }
+
+    .summary { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: baseline; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 22px; box-shadow: var(--shadow-sm); margin-bottom: 22px; }
+    .summary .yrs { font-weight: 800; font-size: 1.05rem; }
+    .summary .it { font-size: 0.9rem; color: var(--text-soft); }
+    .summary .it b { font-size: 1.12rem; font-variant-numeric: tabular-nums; letter-spacing: -0.4px; color: var(--text); }
+    .summary .it.hl b { color: var(--brand-dk); }
+
+    /* ===== 엑셀 시트 ===== */
+    .sheet-wrap { overflow: auto; max-height: 74vh; border: 1px solid var(--line-2); border-radius: 12px; -webkit-overflow-scrolling: touch; }
+    table.sheet { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.8rem; white-space: nowrap; }
+    table.sheet th, table.sheet td { border-right: 1px solid #e9ebf0; border-bottom: 1px solid #eef0f3; padding: 6px 12px; text-align: right; font-variant-numeric: tabular-nums; }
+    table.sheet thead th { position: sticky; top: 0; z-index: 2; background: #f1f3f6; color: #475569; font-weight: 700; font-size: 0.76rem; text-align: center; vertical-align: middle; text-transform: none; letter-spacing: 0; }
+    th.int span { display: block; }
+    th.int .pct { font-size: 0.82em; font-weight: 800; margin-top: 1px; }
+    /* 단리 톤 */
+    .sheet.s th.int { background: #e2e8f0 !important; color: #334155 !important; }
+    .sheet.s th.tot { background: #cbd5e1 !important; color: #1e293b !important; }
+    /* 복리 톤 */
+    .sheet.c th.int { background: #e35c00 !important; color: #fff !important; }
+    .sheet.c th.tot { background: #c44f00 !important; color: #fff !important; }
+    th.ror, td.ror { background: #eef1f5 !important; }
+    td.ror { color: #475569; font-weight: 700; }
+    th.yr, td.yr { position: sticky; left: 0; z-index: 1; text-align: center; }
+    thead th.yr { z-index: 3; background: #374151 !important; color: #fff !important; }
+    td.yr { background: #f7f8fa; font-weight: 700; color: #334155; border-right: 2px solid #d7dbe2; }
+    td.col-total { font-weight: 800; color: #111827; }
+    .sheet.c td.col-total { color: var(--brand-dk); }
+    td.muted { color: #c2c8d0; }
+    tbody tr.row-init td { background: #eef1f5; color: #5b6573; font-weight: 600; }
+    tbody tr.row-init td.yr { background: #e2e6ec; }
+    tbody tr.row-init td.ror { background: #e6eaf0 !important; }
+    tbody tr.mile td { background: #fff8e6; }
+    tbody tr.mile td.yr { background: #ffeec2; }
+    tbody tr.mile td.ror { background: #fdf3d6 !important; }
+    tbody tr.payend td { background: #ffe9d6; }
+    tbody tr.payend td.yr { background: #ffd6ad; }
+    tbody tr.payend td.ror { background: #ffe1c4 !important; }
+    tbody tr:hover td { background: #eef5ff; }
+
+    .linechart { width: 100%; height: auto; display: block; }
+    .legend { display: flex; gap: 18px; align-items: center; margin: 4px 4px 14px; flex-wrap: wrap; }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; font-size: 0.85rem; font-weight: 600; color: var(--text-soft); }
+    .legend i { width: 16px; height: 4px; border-radius: 2px; display: inline-block; }
+
+    .soon { text-align: center; padding: 60px 20px; color: var(--text-mute); }
+    .soon .big { font-size: 2.4rem; margin-bottom: 12px; }
+    .soon b { color: var(--text-soft); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ===== 연금 비교표 ===== */
+    .sheet.cmp th, .sheet.cmp td { text-align: right; }
+    .sheet.cmp th.lbl, .sheet.cmp td.lbl { text-align: left; position: sticky; left: 0; z-index: 1; background: #f7f8fa; font-weight: 600; color: #334155; border-right: 2px solid #d7dbe2; min-width: 150px; }
+    .sheet.cmp thead th { background: #eef1f5; padding: 9px 12px; }
+    .sheet.cmp thead th.lbl { z-index: 3; background: #374151 !important; color: #fff !important; }
+    .sheet.cmp thead th.irp { background: #e2e8f0 !important; color: #1e293b !important; }
+    .sheet.cmp thead th.ps  { background: #dbe5f1 !important; color: #1e3a5f !important; }
+    .sheet.cmp thead th.ins { background: #e35c00 !important; color: #fff !important; }
+    .cmp .prod-sub { display: block; font-size: 0.8em; font-weight: 600; opacity: 0.85; margin-top: 1px; }
+    .cmp tr.sect td { background: #eceff3 !important; font-weight: 800; color: #475569; text-align: left; font-size: 0.75rem; letter-spacing: 0.4px; padding: 6px 12px; }
+    .cmp td.pos { color: #16a34a; font-weight: 700; }
+    .cmp td.neg { color: #dc2626; font-weight: 700; }
+    .cmp tr.final td { background: #fff8e6; font-weight: 800; font-size: 0.86rem; }
+    .cmp tr.final td.lbl { background: #ffeec2; }
+    .cmp tr:hover td { background: #eef5ff; }
+    .cmp td.best { background: #e9f7ed !important; box-shadow: inset 0 0 0 2px #16a34a; border-radius: 4px; }
+    .concl { background: linear-gradient(135deg, #fff2e8, #ffe3cf); border: 1.5px solid var(--brand); border-radius: 16px; padding: 20px 24px; margin-bottom: 22px; box-shadow: var(--shadow-sm); }
+    .concl h3 { font-size: 1.05rem; color: var(--brand-dk); margin-bottom: 7px; }
+    .concl p { font-size: 0.92rem; color: #7a3d00; line-height: 1.65; }
+    .concl b { color: var(--brand-dk); }
+    .concl .big { font-size: 1.5rem; font-weight: 800; display: block; margin-top: 6px; }
+
+    /* 연금 3종 비교 자료 */
+    .pen3-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(218px, 1fr)); gap: 14px; }
+    .pen3 { border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; background: var(--surface); box-shadow: var(--shadow-sm); border-top: 3px solid #cbd5e1; }
+    .pen3.irp { border-top-color: #94a3b8; }
+    .pen3.ps { border-top-color: #3b82f6; }
+    .pen3.ins { border-top-color: var(--brand); background: var(--brand-sft); }
+    .pen3-t { font-size: 1.12rem; font-weight: 800; letter-spacing: -0.3px; }
+    .pen3-sub { font-size: 0.82rem; color: var(--text-soft); font-weight: 600; margin: 5px 0 9px; }
+    .pen3-d { font-size: 0.85rem; color: var(--text); line-height: 1.62; }
+    .pen3-d b { color: var(--brand-dk); }
+    .pen3-tbl { font-size: 0.82rem; }
+    .pen3-tbl th.irp { background: #e2e8f0 !important; color: #1e293b !important; }
+    .pen3-tbl th.ps { background: #dbe5f1 !important; color: #1e3a5f !important; }
+    .pen3-tbl th.ins, .pen3-tbl td.ins-col { background: var(--brand) !important; }
+    .pen3-tbl th.ins { color: #fff !important; }
+    .pen3-tbl td.ins-col { background: #fff4ea !important; }
+    .pen3-tbl td.hi { font-weight: 800; color: var(--brand-dk); }
+    .pen3-tbl td { text-align: center; }
+    .pen3-tbl td.lbl { text-align: left; }
+
+    /* 생애주기 이벤트 표 */
+    table.ev-tbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    table.ev-tbl th, table.ev-tbl td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: center; }
+    table.ev-tbl th { color: var(--text-mute); font-size: 0.76rem; font-weight: 600; }
+    table.ev-tbl input, table.ev-tbl select { padding: 6px 8px; border: 1.5px solid var(--line-2); border-radius: 8px; font-family: inherit; font-size: 0.85rem; }
+    table.ev-tbl input:focus, table.ev-tbl select:focus { outline: none; border-color: var(--brand); }
+    .ev-tbl input.age { width: 56px; text-align: center; }
+    .ev-tbl input.nm { width: 124px; }
+    .ev-tbl input.amt { width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
+    .ev-tbl .del-ev { background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0.5; }
+    .ev-tbl .del-ev:hover { opacity: 1; }
+    .sheet.l4 td.ev-c { color: var(--brand-dk); font-weight: 600; text-align: left; }
+    .sheet.l4 td.neg { color: #dc2626; }
+
+    /* 기본 조건 — 추가/삭제 + 한 줄 4개 */
+    .cond-grid { grid-template-columns: repeat(4, 1fr) !important; }
+    @media (max-width: 760px) { .cond-grid { grid-template-columns: repeat(2, 1fr) !important; } }
+    .cond-grid .field { position: relative; }
+    .cond-x { position: absolute; top: -7px; right: -7px; width: 19px; height: 19px; border-radius: 50%; border: none; background: #e4e7ec; color: #687385; cursor: pointer; font-size: 0.85rem; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; z-index: 2; }
+    .cond-x:hover { background: #dc2626; color: #fff; }
+    .cond-hidden { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; font-size: 0.8rem; color: var(--text-mute); }
+    .cond-chip { background: var(--bg); border: 1px dashed var(--line-2); border-radius: 999px; padding: 5px 12px; font-size: 0.8rem; color: var(--text-soft); cursor: pointer; font-weight: 600; }
+    .cond-chip:hover { border-color: var(--brand); color: var(--brand-dk); background: var(--brand-sft); }
+
+    /* 연금 요약 카드 */
+    .pen-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 13px; margin: -6px 0 24px; }
+    .pen-card { background: var(--surface); border: 1px solid var(--line); border-radius: 13px; padding: 15px 17px; box-shadow: var(--shadow-sm); }
+    .pen-card .t { font-size: 0.8rem; color: var(--text-soft); font-weight: 500; }
+    .pen-card .v { font-size: 1.25rem; font-weight: 800; margin-top: 5px; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+    .pen-card .d { font-size: 0.72rem; color: var(--text-mute); margin-top: 3px; }
+    .pen-card.tax { border: 1.5px solid #fecaca; background: #fef2f2; }
+    .pen-card.tax .v { color: #dc2626; }
+    .pen-card.ded { border: 1.5px solid #bbf7d0; background: #f0fdf4; }
+    .pen-card.ded .v { color: #16a34a; }
+    .pen-card.hl { border: 1.5px solid var(--brand); background: var(--brand-sft); }
+    .pen-card.hl .v { color: var(--brand-dk); }
+    /* 연금보험 사업비 컬럼 */
+    .sheet.ins th.fee { background: #fde2d4 !important; color: #b23a12 !important; }
+    .sheet.ins td.fee { color: #c2410c; }
+    .sheet.ins td.net { font-weight: 700; }
+  </style>
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="finance"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div>
+          <h1>재무 현황 계산기</h1>
+          <div class="sub">고객 상담용 — 단리·복리, 연금 비교, 생애주기 설계</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="tabs" id="tabs">
+        <button data-tab="t1" class="active">1 · 단리 계산기</button>
+        <button data-tab="t2">2 · 복리 계산기</button>
+        <button data-tab="t3">3 · 연금 3종 비교</button>
+        <button data-tab="t4">4 · 생애주기 설계</button>
+      </div>
+
+      <!-- ===================== 탭 1: 단리 계산기 ===================== -->
+      <section class="tab-pane active" id="t1">
+        <div class="note">
+          💡 <b>단리</b> — 원금에만 이자가 붙어요(이자에는 이자 안 붙음). 아래 숫자를 바꾸면 <b>1년~최대 100년치 시트</b>가 즉시 다시 계산돼요.
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>조건 입력</h2><div style="display:flex; gap:8px;"><button class="btn btn-ghost" data-reset="s">↺ 기본값</button><button class="btn btn-ghost boss-only" data-save="1" style="display:none;">💾 기본값 저장</button></div></div>
+          <div class="panel-body">
+            <div class="inp-grid">
+              <div class="field"><label>연 납입액</label><div class="in-wrap"><input type="number" id="s_P" class="has-unit" value="6000000" step="600000" min="0"><span class="unit">원</span></div><div class="hint" id="s_Phint"></div></div>
+              <div class="field"><label>이율 (연)</label><div class="in-wrap"><input type="number" id="s_R" class="has-unit" value="10" step="any" min="0" max="99"><span class="unit">%</span></div><div class="hint">0~99% 가능</div></div>
+              <div class="field"><label>납입 기간</label><div class="in-wrap"><input type="number" id="s_pay" class="has-unit" value="10" step="1" min="1" max="100"><span class="unit">년</span></div><div class="hint">돈 넣는 기간</div></div>
+              <div class="field"><label>표시 기간</label><div class="in-wrap"><input type="number" id="s_total" class="has-unit" value="50" step="1" min="1" max="100"><span class="unit">년</span></div><div class="hint">최대 100년</div></div>
+              <div class="field"><label>초기 자금</label><div class="in-wrap"><input type="number" id="s_init" class="has-unit" value="0" step="1000000" min="0"><span class="unit">원</span></div><div class="hint">선택</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="summary" id="s_summary"></div>
+        <div class="panel">
+          <div class="panel-head"><h2>단리 계산 시트 <span style="color:var(--text-mute); font-weight:500; font-size:0.85rem;">(실시간)</span></h2><span style="color:var(--text-mute); font-size:0.8rem;">단위: 원</span></div>
+          <div class="panel-body" style="padding:14px;">
+            <div class="sheet-wrap"><table class="sheet s"><thead id="s_head"></thead><tbody id="s_body"></tbody></table></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>성장 그래프</h2></div>
+          <div class="panel-body">
+            <div class="legend"><span><i style="background:#94a3b8;"></i> 총 합계</span><span><i style="background:#cbd5e1; height:10px; width:10px; border-radius:50%;"></i> 납입 원금</span></div>
+            <div id="s_chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 탭 2: 복리 계산기 ===================== -->
+      <section class="tab-pane" id="t2">
+        <div class="note">
+          💡 <b>복리</b> — 이자에도 이자가 붙어요(눈덩이 효과). 맨 오른쪽 <b>총수익률</b> = 총합계 ÷ 누적 납입원금 × 100 (100%면 원금 그대로, 시간 갈수록 커짐).
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>조건 입력</h2><div style="display:flex; gap:8px;"><button class="btn btn-ghost" data-reset="c">↺ 기본값</button><button class="btn btn-ghost boss-only" data-save="1" style="display:none;">💾 기본값 저장</button></div></div>
+          <div class="panel-body">
+            <div class="inp-grid">
+              <div class="field"><label>연 납입액</label><div class="in-wrap"><input type="number" id="c_P" class="has-unit" value="6000000" step="600000" min="0"><span class="unit">원</span></div><div class="hint" id="c_Phint"></div></div>
+              <div class="field"><label>이율 (연)</label><div class="in-wrap"><input type="number" id="c_R" class="has-unit" value="10" step="any" min="0" max="99"><span class="unit">%</span></div><div class="hint">0~99% 가능</div></div>
+              <div class="field"><label>납입 기간</label><div class="in-wrap"><input type="number" id="c_pay" class="has-unit" value="10" step="1" min="1" max="100"><span class="unit">년</span></div><div class="hint">돈 넣는 기간</div></div>
+              <div class="field"><label>표시 기간</label><div class="in-wrap"><input type="number" id="c_total" class="has-unit" value="50" step="1" min="1" max="100"><span class="unit">년</span></div><div class="hint">최대 100년</div></div>
+              <div class="field"><label>초기 자금</label><div class="in-wrap"><input type="number" id="c_init" class="has-unit" value="0" step="1000000" min="0"><span class="unit">원</span></div><div class="hint">선택</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="summary" id="c_summary"></div>
+        <div class="panel">
+          <div class="panel-head"><h2>복리 계산 시트 <span style="color:var(--text-mute); font-weight:500; font-size:0.85rem;">(실시간)</span></h2><span style="color:var(--text-mute); font-size:0.8rem;">단위: 원</span></div>
+          <div class="panel-body" style="padding:14px;">
+            <div class="sheet-wrap"><table class="sheet c"><thead id="c_head"></thead><tbody id="c_body"></tbody></table></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>성장 그래프</h2></div>
+          <div class="panel-body">
+            <div class="legend"><span><i style="background:var(--brand);"></i> 총 합계</span><span><i style="background:#cbd5e1; height:10px; width:10px; border-radius:50%;"></i> 납입 원금</span></div>
+            <div id="c_chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 탭 3: 연금 3종 비교 ===================== -->
+      <section class="tab-pane" id="t3">
+        <!-- 연금 3종 비교 자료 (맨 위) -->
+        <div class="panel">
+          <div class="panel-head"><h2>📚 연금 3종 한눈에 비교</h2><span style="color:var(--text-mute); font-size:0.82rem;">IRP · 연금저축 · 연금보험</span></div>
+          <div class="panel-body">
+            <div class="pen3-cards">
+              <div class="pen3 irp">
+                <div class="pen3-t">IRP</div>
+                <div class="pen3-sub">퇴직연금 · 세액공제 (연 900만)</div>
+                <div class="pen3-d"><b>공격형(주식형) 투자 비중 70%까지로 제한.</b> 퇴직금을 IRP로 받는 경우가 아니면 굳이 쓸 필요는 적어요. 연금저축 한도부터 채우는 게 우선.</div>
+              </div>
+              <div class="pen3 ps">
+                <div class="pen3-t">연금저축</div>
+                <div class="pen3-sub">개인연금 · 세액공제 (연 600만)</div>
+                <div class="pen3-d">가장 심플한 투자. 단, 받을 때부터 세금이 붙는 <b>'과세이연'</b> 상품 — 공제받은 만큼 나중에 냅니다.</div>
+              </div>
+              <div class="pen3 ins">
+                <div class="pen3-t">연금보험</div>
+                <div class="pen3-sub">개인연금 · 비과세 (연 1,800만)</div>
+                <div class="pen3-d">국가·산업 ETF <b>투자수익 전액 비과세</b> 수령. <b>중도인출·조기 연금개시</b> 가능, <b>평생(종신) 수령.</b> 복잡한 건 회사가 처리해줘요.</div>
+              </div>
+            </div>
+            <div class="sheet-wrap" style="margin-top:18px; max-height:none;">
+              <table class="sheet cmp pen3-tbl">
+                <thead><tr><th class="lbl">항목</th><th class="irp">IRP</th><th class="ps">연금저축</th><th class="ins">연금보험</th></tr></thead>
+                <tbody>
+                  <tr class="sect"><td class="lbl" colspan="4">💰 세금 · 혜택 — 가장 중요</td></tr>
+                  <tr><td class="lbl">세제 혜택</td><td>세액공제</td><td>세액공제</td><td class="ins-col hi">비과세</td></tr>
+                  <tr><td class="lbl">납입 한도</td><td>연 900만</td><td>연 600만</td><td class="ins-col">연 1,800만</td></tr>
+                  <tr><td class="lbl">연금 수령 세금</td><td>5.5%~</td><td>5.5%~</td><td class="ins-col hi">0% (비과세)</td></tr>
+                  <tr><td class="lbl">연 1,500만 초과 시</td><td>16.5~49.5% 종합과세</td><td>16.5~49.5% 종합과세</td><td class="ins-col hi">0%</td></tr>
+                  <tr><td class="lbl">건강보험료</td><td>논의중</td><td>논의중</td><td class="ins-col hi">없음 (X)</td></tr>
+                  <tr class="sect"><td class="lbl" colspan="4">🏷️ 수수료</td></tr>
+                  <tr><td class="lbl">기본납입 수수료</td><td>0.1~1%</td><td>0.1~1%</td><td class="ins-col">8~9%</td></tr>
+                  <tr><td class="lbl">추가납입 수수료</td><td>0.1~1%</td><td>0.1~1%</td><td class="ins-col hi">0%</td></tr>
+                  <tr class="sect"><td class="lbl" colspan="4">📈 수령 · 인출</td></tr>
+                  <tr><td class="lbl">중도 인출</td><td>불가</td><td>불가</td><td class="ins-col hi">가능</td></tr>
+                  <tr><td class="lbl">수령 기간</td><td>확정기간</td><td>확정기간</td><td class="ins-col hi">종신(평생)</td></tr>
+                  <tr><td class="lbl">수령 개시</td><td>55세~</td><td>55세~</td><td class="ins-col">45~80세</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="font-size:0.82rem; color:var(--text-soft); line-height:1.6; margin-top:14px; padding:13px 16px; background:var(--brand-sft); border-radius:12px;">
+              👉 <b>핵심:</b> 연금저축·IRP의 세액공제는 '공짜'가 아니라 <b>나중에 세금으로 돌려받는 과세이연</b>이에요. 연금보험은 앞단 사업비만 내면 <b>평생 비과세 + 종신 수령</b>. 아래 시트에서 직접 숫자로 비교해보세요.
+            </div>
+          </div>
+        </div>
+
+        <div class="note">
+          💡 <b>같은 600만원</b>을 같은 수익률로 굴렸을 때 — <b>연금저축</b>은 받을 때 세금(연 1,500만 이하 5.5%·초과 16.5%)을 내고, <b>연금보험</b>은 사업비만 내고 비과세예요. 두 시트의 숫자를 바꾸면 실시간 재계산됩니다.
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>공통 조건</h2><div style="display:flex; gap:8px;"><button class="btn btn-ghost" data-reset="p">↺ 기본값</button><button class="btn btn-ghost boss-only" data-save="1" style="display:none;">💾 기본값 저장</button></div></div>
+          <div class="panel-body">
+            <div class="inp-grid">
+              <div class="field"><label>투자 수익률 (연)</label><div class="in-wrap"><input type="number" id="p_rate" class="has-unit" value="10" step="any" min="0" max="99"><span class="unit">%</span></div><div class="hint">복리</div></div>
+              <div class="field"><label>연 납입액</label><div class="in-wrap"><input type="number" id="p_annual" class="has-unit" value="6000000" step="600000" min="0"><span class="unit">원</span></div><div class="hint" id="p_annualHint"></div></div>
+              <div class="field"><label>납입 기간</label><div class="in-wrap"><input type="number" id="p_pay" class="has-unit" value="10" step="1" min="1" max="100"><span class="unit">년</span></div><div class="hint">돈 넣는 기간</div></div>
+              <div class="field"><label>표시 기간 (시트 길이)</label><div class="in-wrap"><input type="number" id="p_total" class="has-unit" value="31" step="1" min="1" max="100"><span class="unit">년</span></div><div class="hint">최대 100년</div></div>
+              <div class="field"><label>수령 기간 (세금 나눔)</label><div class="in-wrap"><input type="number" id="p_recv" class="has-unit" value="30" step="1" min="1" max="60"><span class="unit">년</span></div><div class="hint">받는 기간</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ① 연금저축 -->
+        <div class="panel">
+          <div class="panel-head"><h2>① 연금저축 <span style="color:var(--text-mute); font-weight:500; font-size:0.85rem;">세액공제 받지만 → 받을 때 16.5% 과세</span></h2><span style="color:var(--text-mute); font-size:0.8rem;">단위: 원</span></div>
+          <div class="panel-body" style="padding:14px;">
+            <div class="sheet-wrap"><table class="sheet c"><thead id="ps_head"></thead><tbody id="ps_body"></tbody></table></div>
+          </div>
+        </div>
+        <div class="pen-sum" id="ps_sum"></div>
+
+        <!-- ② 연금보험 -->
+        <div class="panel">
+          <div class="panel-head"><h2>② 연금보험 <span style="color:var(--text-mute); font-weight:500; font-size:0.85rem;">앞 10년 사업비만 내고 → 비과세(세금 0)</span></h2><span style="color:var(--text-mute); font-size:0.8rem;">단위: 원</span></div>
+          <div class="panel-body" style="padding:14px;">
+            <div class="sheet-wrap"><table class="sheet ins"><thead id="ins_head"></thead><tbody id="ins_body"></tbody></table></div>
+          </div>
+        </div>
+        <div class="pen-sum" id="ins_sum"></div>
+
+        <!-- 최종 비교 -->
+        <div id="p_concl"></div>
+
+        <!-- 아래: 추가납입 활용 IRP vs 연금보험 -->
+        <div class="panel" style="margin-top:34px;">
+          <div class="panel-head"><h2>➕ 추가납입 활용 — IRP vs 연금보험</h2></div>
+          <div class="panel-body">
+            <div class="note" style="margin:0 0 18px;">💡 <b>추가납입이란?</b> 연금보험은 기본보험료의 <b>2배까지</b> 더 넣을 수 있어요(기본 600만 → 추가 1,200만까지). 핵심은 <b>이 추가분엔 사업비(수수료)를 한 푼도 안 뗀다</b>는 거예요 — 원금 100%가 그대로 적립됩니다. 그래서 IRP 900만에 맞춰 <b>연금보험 900만(기본 600 + 추가 300)</b>을 넣으면, 사업비는 기본 600만에만 붙어 훨씬 유리해져요.</div>
+            <div class="inp-grid">
+              <div class="field"><label>투자 수익률 (연)</label><div class="in-wrap"><input type="number" id="p_rate2" class="has-unit" value="10" step="any" min="0" max="99"><span class="unit">%</span></div><div class="hint">위와 따로 조절</div></div>
+              <div class="field"><label>IRP 연 납입</label><div class="in-wrap"><input type="number" id="p_irp" class="has-unit" value="9000000" step="900000" min="0"><span class="unit">원</span></div><div class="hint">전액 세액공제 대상</div></div>
+              <div class="field"><label>연금보험 기본보험료</label><div class="in-wrap"><input type="number" id="p_base" class="has-unit" value="6000000" step="600000" min="0"><span class="unit">원</span></div><div class="hint">사업비 차감</div></div>
+              <div class="field"><label>연금보험 추가납입</label><div class="in-wrap"><input type="number" id="p_extra" class="has-unit" value="12000000" step="600000" min="0"><span class="unit">원</span></div><div class="hint">수수료 0 · 원금 100%</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>③ IRP <span style="color:var(--text-mute); font-weight:500; font-size:0.85rem;">세액공제 받지만 → 받을 때 16.5% 과세</span></h2><span style="color:var(--text-mute); font-size:0.8rem;">단위: 원</span></div>
+          <div class="panel-body" style="padding:14px;"><div class="sheet-wrap"><table class="sheet c"><thead id="irp_head"></thead><tbody id="irp_body"></tbody></table></div></div>
+        </div>
+        <div class="pen-sum" id="irp_sum"></div>
+        <div class="panel">
+          <div class="panel-head"><h2>④ 연금보험 (기본 + 추가납입) <span style="color:var(--text-mute); font-weight:500; font-size:0.85rem;">추가분은 수수료 0 → 전액 비과세</span></h2><span style="color:var(--text-mute); font-size:0.8rem;">단위: 원</span></div>
+          <div class="panel-body" style="padding:14px;"><div class="sheet-wrap"><table class="sheet ins"><thead id="add_head"></thead><tbody id="add_body"></tbody></table></div></div>
+        </div>
+        <div class="pen-sum" id="add_sum"></div>
+        <div id="p_concl2"></div>
+
+        <!-- ⑤ 연금보험 단독 계산기 -->
+        <div class="panel" style="margin-top:34px; border-top:3px solid var(--brand);">
+          <div class="panel-head"><h2>🧮 연금보험 단독 계산기</h2>
+            <div style="display:flex; gap:8px;"><button class="btn btn-ghost" data-reset="ins2">↺ 기본값</button><button class="btn btn-ghost boss-only" data-save="1" style="display:none;">💾 기본값 저장</button></div>
+          </div>
+          <div class="panel-body">
+            <div class="inp-grid">
+              <div class="field"><label>투자 수익률 (연)</label><div class="in-wrap"><input type="number" id="ins2_rate" class="has-unit" value="10" step="any" min="0" max="99"><span class="unit">%</span></div><div class="hint">복리</div></div>
+              <div class="field"><label>연 기본보험료</label><div class="in-wrap"><input type="number" id="ins2_base" class="has-unit" value="6000000" step="600000" min="0"><span class="unit">원</span></div><div class="hint" id="ins2_baseHint"></div></div>
+              <div class="field"><label>추가납입</label><div class="in-wrap"><input type="number" id="ins2_extra" class="has-unit" value="3000000" step="600000" min="0"><span class="unit">원</span></div><div class="hint">수수료 0 · 원금 100%</div></div>
+              <div class="field"><label>납입 기간</label><div class="in-wrap"><input type="number" id="ins2_pay" class="has-unit" value="10" step="1" min="1" max="100"><span class="unit">년</span></div><div class="hint">돈 넣는 기간</div></div>
+              <div class="field"><label>표시 기간</label><div class="in-wrap"><input type="number" id="ins2_total" class="has-unit" value="31" step="1" min="1" max="100"><span class="unit">년</span></div><div class="hint">최대 100년</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>연금보험 시트 <span style="color:var(--text-mute); font-weight:500; font-size:0.85rem;">(실시간)</span></h2><span style="color:var(--text-mute); font-size:0.8rem;">단위: 원</span></div>
+          <div class="panel-body" style="padding:14px;"><div class="sheet-wrap"><table class="sheet ins"><thead id="ins2_head"></thead><tbody id="ins2_body"></tbody></table></div></div>
+        </div>
+        <div class="pen-sum" id="ins2_sum"></div>
+
+        <div style="font-size:0.76rem; color:var(--text-mute); line-height:1.7; padding:0 4px;">
+          ※ 가정: 연금보험 사업비 1~6년 9.24%·7~10년 6.19% / 세액공제 = 납입원금 × 13.2% / 연금 수령세금 = 연 수령액 <b>1,500만원 이하 5.5% · 초과 16.5%</b> 자동 적용 / 추가납입은 사업비 0.
+        </div>
+      </section>
+
+      <!-- ===================== 탭 4: 생애주기 설계 ===================== -->
+      <section class="tab-pane" id="t4">
+        <div class="note">💡 <b>몇 살부터</b> 매달 저축해서, 중간에 <b>집·결혼·육아</b> 같은 인생 이벤트를 거쳐도 자산이 어떻게 쌓이는지 보여줘요. 이벤트는 직접 추가·수정할 수 있어요. <b>금액은 만원 단위</b>이고, <b>실제 내 주머니에서 나가는 돈</b>으로 넣으세요(집은 대출 뺀 자기자본).</div>
+        <div class="panel">
+          <div class="panel-head"><h2>기본 조건</h2><div style="display:flex; gap:8px;"><button class="btn btn-ghost" id="condAdd">＋ 조건 추가</button><button class="btn btn-ghost" data-reset="l4">↺ 기본값</button><button class="btn btn-ghost boss-only" data-save="1" style="display:none;">💾 기본값 저장</button></div></div>
+          <div class="panel-body">
+            <div class="inp-grid cond-grid" id="condGrid">
+              <div class="field"><label>시작 나이</label><div class="in-wrap"><input type="number" id="l4_start" class="has-unit" value="30" step="1" min="0" max="100"><span class="unit">세</span></div><div class="hint">저축 시작</div></div>
+              <div class="field"><label>끝 나이</label><div class="in-wrap"><input type="number" id="l4_end" class="has-unit" value="50" step="1" min="1" max="100"><span class="unit">세</span></div><div class="hint">시트 끝</div></div>
+              <div class="field"><label>연봉</label><div class="in-wrap"><input type="number" id="l4_salary" class="has-unit" value="5000" step="100" min="0"><span class="unit">만원</span></div><div class="hint" id="l4_saveHint"></div></div>
+              <div class="field"><label>저축률</label><div class="in-wrap"><input type="number" id="l4_saverate" class="has-unit" value="50" step="1" min="0" max="100"><span class="unit">%</span></div><div class="hint">연봉 중 저축</div></div>
+              <div class="field"><label>부동산 분배</label><div class="in-wrap"><input type="number" id="l4_realloc" class="has-unit" value="80" step="1" min="0" max="100"><span class="unit">%</span></div><div class="hint">나머진 연금</div></div>
+              <div class="field"><label>집값 수익률</label><div class="in-wrap"><input type="number" id="l4_houserate" class="has-unit" value="7" step="any" min="0" max="99"><span class="unit">%</span></div><div class="hint">부동산 상승</div></div>
+              <div class="field"><label>연금 수익률</label><div class="in-wrap"><input type="number" id="l4_penrate" class="has-unit" value="10" step="any" min="0" max="99"><span class="unit">%</span></div><div class="hint">투자 복리</div></div>
+              <div class="field"><label>매년적립금 비율</label><div class="in-wrap"><input type="number" id="l4_penpct" class="has-unit" value="10" step="any" min="0" max="99"><span class="unit">%</span></div><div class="hint">연금×이 비율</div></div>
+              <div class="field"><label>연금 납입기간</label><div class="in-wrap"><input type="number" id="l4_penyears" class="has-unit" value="10" step="1" min="0" max="100"><span class="unit">년</span></div><div class="hint">끝나면 부동산으로</div></div>
+              <div class="field"><label>초기 현금</label><div class="in-wrap"><input type="number" id="l4_cash0" class="has-unit" value="20000" step="1000" min="0"><span class="unit">만원</span></div><div class="hint">집 살 돈(2억)</div></div>
+              <div class="field"><label>초기 연금</label><div class="in-wrap"><input type="number" id="l4_pen0" class="has-unit" value="0" step="100" min="0"><span class="unit">만원</span></div><div class="hint">이미 가진 연금</div></div>
+            </div>
+            <div class="cond-hidden" id="condHidden" style="display:none;"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>생애 이벤트</h2><button class="btn btn-ghost" id="l4_add">＋ 이벤트 추가</button></div>
+          <div class="panel-body" style="padding:14px;">
+            <div class="sheet-wrap" style="max-height:none;">
+              <table class="ev-tbl"><thead><tr><th>나이</th><th>종료</th><th>이름</th><th>종류</th><th>금액</th><th>대출</th><th>월상환</th><th></th></tr></thead><tbody id="l4_events"></tbody></table>
+            </div>
+            <div style="font-size:0.76rem; color:var(--text-mute); margin-top:10px; line-height:1.6;"><b>종류는 직접 고르고 이름은 자유롭게.</b> 모두 <b>만원 단위</b>(6억=60000). — <b>집 사기</b>: <b>금액 칸엔 '집 전체 가격'</b>(예 6억=60000)을 넣고, 대출(4억)·월상환을 넣으면 → 내 돈(집값−대출)은 자동 계산. 이전 집은 자동으로 팔림 / <b>일시 목돈(−)</b>: 그 나이에 한 번 빠짐(결혼) / <b>매월 지출(−)</b>: 시작~종료 매달(교육비·대출상환) / <b>매월 수입(+)</b>: 매달 들어옴. 종료 비우면 끝까지.</div>
+          </div>
+        </div>
+        <div id="l4_summary" class="pen-sum"></div>
+        <div class="panel">
+          <div class="panel-head"><h2>나이별 자산 시트 <span style="color:var(--text-mute); font-weight:500; font-size:0.85rem;">(실시간)</span></h2></div>
+          <div class="panel-body" style="padding:14px;"><div class="sheet-wrap"><table class="sheet l4"><thead id="l4_head"></thead><tbody id="l4_body"></tbody></table></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>자산 곡선</h2><span style="color:var(--text-mute); font-size:0.8rem;">━ 순자산 · ┈ 총자산 · 🔴 이벤트</span></div>
+          <div class="panel-body"><div id="l4_chart"></div></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const won = n => Math.round(n).toLocaleString('ko-KR');
+    function korShort(n) {
+      n = Math.round(n);
+      const neg = n < 0, a = Math.abs(n);   // 음수는 절댓값으로 계산하고 부호만 따로
+      if (a < 10000) return (neg ? '-' : '') + won(a) + '원';
+      const eok = Math.floor(a / 1e8), man = Math.floor((a % 1e8) / 1e4);
+      let s = '';
+      if (eok) s += eok + '억';
+      if (man) s += (eok ? ' ' : '') + man.toLocaleString() + '만';
+      return (neg ? '-' : '') + (s || won(a)) + '원';
+    }
+
+    // 단리=전년 '원금합계'×이율 / 복리=전년 '총합계'×이율
+    function run(annualContrib, payYears, totalYears, rate, mode, initial) {
+      const rows = [];
+      let prinSum = initial, intTotal = 0, total = initial;
+      for (let y = 1; y <= totalYears; y++) {
+        const contrib = y <= payYears ? annualContrib : 0;
+        const interest = (mode === 'simple' ? prinSum : total) * rate;
+        prinSum += contrib; intTotal += interest; total = prinSum + intTotal;
+        rows.push({ year: y, contrib, interest, prinSum, intTotal, total });
+      }
+      return rows;
+    }
+
+    const CALCS = {
+      s: { mode: 'simple',   color: '#94a3b8', def: { P: 6000000, R: 10, pay: 10, total: 50, init: 0 } },
+      c: { mode: 'compound', color: '#ff6a00', def: { P: 6000000, R: 10, pay: 10, total: 50, init: 0 } },
+    };
+    const gnum = id => { const v = parseFloat($(id).value); return isNaN(v) ? 0 : v; };
+    const clampI = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(v)));
+
+    function render(key) {
+      const cfg = CALCS[key], id = s => key + '_' + s;
+      const P = gnum(id('P')), Rpct = gnum(id('R')), R = Rpct / 100;
+      let pay = clampI(gnum(id('pay')), 1, 100), total = clampI(gnum(id('total')), 1, 100);
+      if (total < pay) total = pay;
+      const init = gnum(id('init'));
+      $(id('Phint')).textContent = '월 ' + korShort(P / 12);
+
+      const rows = run(P, pay, total, R, cfg.mode, init);
+      const isC = key === 'c';
+
+      // 헤더
+      $(id('head')).innerHTML = `<tr>
+        <th class="yr">Year</th>
+        <th>원금</th>
+        <th class="int"><span>이자</span><span class="pct">${Rpct}%</span></th>
+        <th>원금합계</th>
+        <th>이자총액</th>
+        <th class="tot">총 합계</th>
+        <th class="ror">총수익률</th>
+      </tr>`;
+
+      // 초기자금 행
+      const initRor = init > 0 ? '100.00%' : '<span class="muted">–</span>';
+      let html = `<tr class="row-init">
+        <td class="yr">초기자금</td>
+        <td class="muted">–</td><td class="muted">–</td><td>${won(init)}</td><td>0</td><td class="col-total">${won(init)}</td><td class="ror">${initRor}</td>
+      </tr>`;
+
+      for (let i = 0; i < total; i++) {
+        const r = rows[i], year = i + 1;
+        const isPayEnd = year === pay;
+        const isMile = !isPayEnd && (year % 10 === 0 || year === total);
+        const cls = isPayEnd ? 'payend' : (isMile ? 'mile' : '');
+        const pn = r.contrib ? won(r.contrib) : '<span class="muted">–</span>';
+        const ror = r.prinSum > 0 ? (r.total / r.prinSum * 100).toFixed(2) + '%' : '<span class="muted">–</span>';
+        html += `<tr class="${cls}">
+          <td class="yr">${year}${isPayEnd ? '★' : ''}</td>
+          <td>${pn}</td><td>${won(r.interest)}</td><td>${won(r.prinSum)}</td><td>${won(r.intTotal)}</td><td class="col-total">${won(r.total)}</td><td class="ror">${ror}</td>
+        </tr>`;
+      }
+      $(id('body')).innerHTML = html;
+
+      // 요약
+      const L = rows[total - 1];
+      const profit = L.total - L.prinSum;
+      const rorF = L.prinSum > 0 ? (L.total / L.prinSum * 100).toFixed(1) : '-';
+      $(id('summary')).innerHTML = `
+        <span class="yrs">${total}년 후</span>
+        <span class="it hl">총 합계 <b>${korShort(L.total)}</b></span>
+        <span class="it">납입 원금 <b>${korShort(L.prinSum)}</b></span>
+        <span class="it">불어난 이자 <b>${korShort(profit)}</b></span>
+        <span class="it">총수익률 <b>${rorF}%</b></span>`;
+
+      drawChart(rows, total, cfg.color, $(id('chart')));
+    }
+
+    function drawChart(rows, years, color, el) {
+      const W = 760, H = 240, padL = 8, padR = 8, padT = 16, padB = 28, n = years;
+      const maxV = Math.max(rows[n - 1].total, 1);
+      const px = i => padL + (W - padL - padR) * (n > 1 ? i / (n - 1) : 0);
+      const py = val => H - padB - (H - padT - padB) * (val / maxV);
+      const line = key => rows.map((r, i) => (i ? 'L' : 'M') + px(i).toFixed(1) + ' ' + py(r[key]).toFixed(1)).join(' ');
+      const area = 'M' + px(0).toFixed(1) + ' ' + py(0).toFixed(1) + ' ' + rows.map((r, i) => 'L' + px(i).toFixed(1) + ' ' + py(r.total).toFixed(1)).join(' ') + ' L' + px(n - 1).toFixed(1) + ' ' + py(0).toFixed(1) + ' Z';
+      let grid = '';
+      for (let g = 0; g <= 4; g++) { const val = maxV * g / 4, yy = py(val); grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" stroke="#eef0f3"/><text x="${padL + 2}" y="${(yy - 4).toFixed(1)}" font-size="10" fill="#9aa3b2">${korShort(val)}</text>`; }
+      let xl = ''; [0, Math.floor((n - 1) / 2), n - 1].forEach(i => { xl += `<text x="${px(i).toFixed(1)}" y="${H - 8}" font-size="10" fill="#9aa3b2" text-anchor="middle">${i + 1}년</text>`; });
+      el.innerHTML =
+        `<svg class="linechart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">` +
+        grid +
+        `<path d="${area}" fill="${color}22"/>` +
+        `<path d="${line('prinSum')}" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="4 4"/>` +
+        `<path d="${line('total')}" fill="none" stroke="${color}" stroke-width="3"/>` +
+        xl + `</svg>`;
+    }
+
+    // ===== 기본값 저장 시스템 (관리자만 저장) =====
+    const HARD = {
+      s_P: 6000000, s_R: 10, s_pay: 10, s_total: 50, s_init: 0,
+      c_P: 6000000, c_R: 10, c_pay: 10, c_total: 50, c_init: 0,
+      p_rate: 10, p_annual: 6000000, p_pay: 10, p_total: 31, p_recv: 30,
+      p_rate2: 10, p_irp: 9000000, p_base: 6000000, p_extra: 12000000,
+      ins2_rate: 10, ins2_base: 6000000, ins2_extra: 3000000, ins2_pay: 10, ins2_total: 31,
+      l4_start: 30, l4_end: 50, l4_salary: 5000, l4_saverate: 50, l4_realloc: 80, l4_houserate: 7, l4_penrate: 10, l4_penpct: 10, l4_penyears: 10, l4_cash0: 20000, l4_pen0: 0,
+    };
+    const FIELDS = {
+      s: ['s_P', 's_R', 's_pay', 's_total', 's_init'],
+      c: ['c_P', 'c_R', 'c_pay', 'c_total', 'c_init'],
+      p: ['p_rate', 'p_annual', 'p_pay', 'p_total', 'p_recv', 'p_rate2', 'p_irp', 'p_base', 'p_extra'],
+      ins2: ['ins2_rate', 'ins2_base', 'ins2_extra', 'ins2_pay', 'ins2_total'],
+      l4: ['l4_start', 'l4_end', 'l4_salary', 'l4_saverate', 'l4_realloc', 'l4_houserate', 'l4_penrate', 'l4_penpct', 'l4_penyears', 'l4_cash0', 'l4_pen0'],
+    };
+    let DEF = { ...HARD };
+    const _auth = (() => { try { return JSON.parse(localStorage.getItem('hwAuth') || 'null'); } catch (e) { return null; } })();
+    const isBoss = !!(_auth && _auth.role === 'boss');
+    const TAX = 0.165, DED = 0.132;
+
+    function render3() {
+      const r = gnum('p_rate') / 100, Rpct = gnum('p_rate');
+      const P = gnum('p_annual');
+      const pay = clampI(gnum('p_pay'), 1, 100);
+      const total = Math.max(pay, clampI(gnum('p_total'), 1, 100));
+      const recv = clampI(gnum('p_recv'), 1, 60);
+      $('p_annualHint').textContent = '월 ' + korShort(P / 12);
+
+      // ① 연금저축 (사업비 없음) — 복리계산기와 동일
+      const ps = run(P, pay, total, r, 'compound', 0);
+      // ② 연금보험 (사업비 차감 후 적립)
+      const ins = [];
+      let ibal = 0, iPrin = 0, iInt = 0, feeTotal = 0;
+      for (let y = 1; y <= total; y++) {
+        let payAmt = 0, fee = 0, net = 0;
+        if (y <= pay) { payAmt = P; const fr = y <= 6 ? 0.0924 : 0.0619; fee = P * fr; net = P - fee; feeTotal += fee; }
+        const interest = ibal * r;
+        iPrin += net; iInt += interest; ibal = iPrin + iInt;
+        ins.push({ year: y, payAmt, fee, net, interest, prinSum: iPrin, intTotal: iInt, total: ibal });
+      }
+
+      // 시트 헤더
+      $('ps_head').innerHTML = `<tr><th class="yr">Year</th><th>원금</th><th class="int"><span>이자</span><span class="pct">${Rpct}%</span></th><th>원금합계</th><th>이자총액</th><th class="tot">총 합계</th><th class="ror">총수익률</th></tr>`;
+      $('ins_head').innerHTML = `<tr><th class="yr">Year</th><th>납입액</th><th class="fee">사업비</th><th>적립원금</th><th class="int"><span>이자</span><span class="pct">${Rpct}%</span></th><th>원금합계</th><th>이자총액</th><th class="tot">총 합계</th><th class="ror">총수익률</th></tr>`;
+
+      const rowCls = (year) => year === pay ? 'payend' : ((year % 10 === 0 || year === total) ? 'mile' : '');
+      const rorOf = x => x.prinSum > 0 ? (x.total / x.prinSum * 100).toFixed(2) + '%' : '<span class="muted">–</span>';
+
+      // 연금저축 시트
+      let h1 = '';
+      for (let i = 0; i < total; i++) {
+        const x = ps[i], year = i + 1;
+        const pn = x.contrib ? won(x.contrib) : '<span class="muted">–</span>';
+        h1 += `<tr class="${rowCls(year)}"><td class="yr">${year}${year === pay ? '★' : ''}</td><td>${pn}</td><td>${won(x.interest)}</td><td>${won(x.prinSum)}</td><td>${won(x.intTotal)}</td><td class="col-total">${won(x.total)}</td><td class="ror">${rorOf(x)}</td></tr>`;
+      }
+      $('ps_body').innerHTML = h1;
+
+      // 연금보험 시트
+      let h2 = '';
+      for (let i = 0; i < total; i++) {
+        const x = ins[i], year = i + 1, inPay = year <= pay;
+        const m = '<span class="muted">–</span>';
+        h2 += `<tr class="${rowCls(year)}"><td class="yr">${year}${year === pay ? '★' : ''}</td><td>${inPay ? won(x.payAmt) : m}</td><td class="fee">${inPay ? '−' + won(x.fee) : m}</td><td class="net">${inPay ? won(x.net) : m}</td><td>${won(x.interest)}</td><td>${won(x.prinSum)}</td><td>${won(x.intTotal)}</td><td class="col-total">${won(x.total)}</td><td class="ror">${rorOf(x)}</td></tr>`;
+      }
+      $('ins_body').innerHTML = h2;
+
+      // 요약 계산 (연 수령액 1,500만 이하 5.5% · 초과 16.5% 자동 분기)
+      const A = ps[total - 1].total, paid = P * pay;
+      const annualPayout = A / recv;
+      const psRate = annualPayout <= 15000000 ? 0.055 : 0.165;
+      const annualTax = annualPayout * psRate, totalTax = annualTax * recv, deduction = paid * DED;
+      const psNet = A - totalTax + deduction;
+      const B = ins[total - 1].total, insNet = B;
+
+      const card = (cls, t, v, d) => `<div class="pen-card ${cls}"><div class="t">${t}</div><div class="v">${v}</div>${d ? `<div class="d">${d}</div>` : ''}</div>`;
+
+      $('ps_sum').innerHTML =
+        card('', `${total}년 뒤 총액`, korShort(A)) +
+        card('', `연 수령액 (÷${recv}년)`, korShort(annualPayout)) +
+        card('', `연 세금 (×${(psRate * 100).toFixed(1)}%)`, korShort(annualTax), annualPayout <= 15000000 ? '1,500만↓ 저율과세' : '1,500만 초과') +
+        card('tax', `★ ${recv}년 총 세금`, '−' + korShort(totalTax), '제일 중요한 숫자') +
+        card('ded', '세액공제 (원금×13.2%)', '+' + korShort(deduction), `납입원금 ${korShort(paid)}`);
+
+      $('ins_sum').innerHTML =
+        card('', `${total}년 뒤 총액`, korShort(B)) +
+        card('', '총 사업비 (8.02%)', '−' + korShort(feeTotal), '앞 10년만') +
+        card('ded', '받을 때 세금', '0원 ✅', '비과세') +
+        card('hl', '실수령 (세금 0)', korShort(B));
+
+      const gap = insNet - psNet;
+      $('p_concl').innerHTML = `<div class="concl"><h3>💡 결론 — 같은 ${korShort(P)}씩 ${pay}년 넣으면</h3><p>` +
+        `<b>연금저축</b>은 세액공제 <b>+${korShort(deduction)}</b>를 받지만, ${recv}년 받는 동안 세금 <b>−${korShort(totalTax)}</b>를 냅니다. ` +
+        `<b>연금보험</b>은 사업비 <b>−${korShort(feeTotal)}</b>만 내고 <b>세금 0(비과세)</b>이고요.` +
+        (gap >= 0
+          ? `<span class="big">→ 연금보험이 ${korShort(gap)} 더 받습니다</span>`
+          : `<span class="big">→ 이 조건에선 연금저축이 ${korShort(-gap)} 더 받네요</span>`) +
+        `<span style="font-size:0.85rem; opacity:0.85;">연금저축 실수령(세후+공제) ${korShort(psNet)} · 연금보험 ${korShort(insNet)}</span></p></div>`;
+
+      // ===== 아래 비교: IRP vs 연금보험(추가납입) — 수익률 따로 =====
+      const r2 = gnum('p_rate2') / 100, Rpct2 = gnum('p_rate2');
+      const irpP = gnum('p_irp'), baseP = gnum('p_base'), extraP = gnum('p_extra');
+      const irp = run(irpP, pay, total, r2, 'compound', 0);
+      const add = []; let abal = 0, aPrin = 0, aInt = 0, aFee = 0;
+      for (let y = 1; y <= total; y++) {
+        let base = 0, fee = 0, extra = 0, net = 0;
+        if (y <= pay) { base = baseP; const fr = y <= 6 ? 0.0924 : 0.0619; fee = baseP * fr; extra = extraP; net = (baseP - fee) + extraP; aFee += fee; }
+        const interest = abal * r2;
+        aPrin += net; aInt += interest; abal = aPrin + aInt;
+        add.push({ year: y, base, fee, extra, net, interest, prinSum: aPrin, intTotal: aInt, total: abal });
+      }
+
+      $('irp_head').innerHTML = `<tr><th class="yr">Year</th><th>원금</th><th class="int"><span>이자</span><span class="pct">${Rpct2}%</span></th><th>원금합계</th><th>이자총액</th><th class="tot">총 합계</th><th class="ror">총수익률</th></tr>`;
+      $('add_head').innerHTML = `<tr><th class="yr">Year</th><th>기본</th><th class="fee">사업비</th><th>추가납입</th><th>적립원금</th><th class="int"><span>이자</span><span class="pct">${Rpct2}%</span></th><th>원금합계</th><th>이자총액</th><th class="tot">총 합계</th><th class="ror">총수익률</th></tr>`;
+
+      let h3 = '';
+      for (let i = 0; i < total; i++) {
+        const x = irp[i], year = i + 1;
+        const pn = x.contrib ? won(x.contrib) : '<span class="muted">–</span>';
+        h3 += `<tr class="${rowCls(year)}"><td class="yr">${year}${year === pay ? '★' : ''}</td><td>${pn}</td><td>${won(x.interest)}</td><td>${won(x.prinSum)}</td><td>${won(x.intTotal)}</td><td class="col-total">${won(x.total)}</td><td class="ror">${rorOf(x)}</td></tr>`;
+      }
+      $('irp_body').innerHTML = h3;
+
+      let h4 = '';
+      for (let i = 0; i < total; i++) {
+        const x = add[i], year = i + 1, inPay = year <= pay, m = '<span class="muted">–</span>';
+        h4 += `<tr class="${rowCls(year)}"><td class="yr">${year}${year === pay ? '★' : ''}</td><td>${inPay ? won(x.base) : m}</td><td class="fee">${inPay ? '−' + won(x.fee) : m}</td><td>${inPay ? won(x.extra) : m}</td><td class="net">${inPay ? won(x.net) : m}</td><td>${won(x.interest)}</td><td>${won(x.prinSum)}</td><td>${won(x.intTotal)}</td><td class="col-total">${won(x.total)}</td><td class="ror">${rorOf(x)}</td></tr>`;
+      }
+      $('add_body').innerHTML = h4;
+
+      const AI = irp[total - 1].total, irpPaid = irpP * pay;
+      const irpPayout = AI / recv;
+      const irpRate = irpPayout <= 15000000 ? 0.055 : 0.165;
+      const irpTax = irpPayout * irpRate * recv, irpDed = Math.min(irpP, 9000000) * DED * pay, irpNet = AI - irpTax + irpDed;
+      const AB = add[total - 1].total, addPaid = (baseP + extraP) * pay;
+      $('irp_sum').innerHTML =
+        card('', `${total}년 뒤 총액`, korShort(AI)) +
+        card('', `연 수령액 (÷${recv}년)`, korShort(AI / recv)) +
+        card('', `연 세금 (×${(irpRate * 100).toFixed(1)}%)`, korShort(irpPayout * irpRate), irpPayout <= 15000000 ? '1,500만↓ 저율과세' : '1,500만 초과') +
+        card('tax', `★ ${recv}년 총 세금`, '−' + korShort(irpTax), '제일 중요한 숫자') +
+        card('ded', '세액공제 (원금×13.2%)', '+' + korShort(irpDed), `납입원금 ${korShort(irpPaid)}`);
+      $('add_sum').innerHTML =
+        card('', `${total}년 뒤 총액`, korShort(AB)) +
+        card('', '총 사업비', '−' + korShort(aFee), `${addPaid ? (aFee / addPaid * 100).toFixed(2) : 0}% · 추가분 0`) +
+        card('ded', '받을 때 세금', '0원 ✅', '비과세') +
+        card('hl', '실수령 (세금 0)', korShort(AB));
+
+      const gap2 = AB - irpNet;
+      $('p_concl2').innerHTML = `<div class="concl"><h3>💡 결론 — IRP ${korShort(irpP)} vs 연금보험 ${korShort(baseP + extraP)} (기본 ${korShort(baseP)} + 추가 ${korShort(extraP)})</h3><p>` +
+        `<b>IRP</b>는 세액공제 <b>+${korShort(irpDed)}</b>를 받지만 ${recv}년간 세금 <b>−${korShort(irpTax)}</b>를 냅니다. ` +
+        `<b>연금보험</b>은 사업비 <b>−${korShort(aFee)}</b>(추가납입 ${korShort(extraP)}엔 수수료 0)만 내고 <b>세금 0</b>이에요.` +
+        (gap2 >= 0
+          ? `<span class="big">→ 연금보험이 ${korShort(gap2)} 더 받습니다</span>`
+          : `<span class="big">→ 이 조건에선 IRP가 ${korShort(-gap2)} 더 받네요</span>`) +
+        `<span style="font-size:0.85rem; opacity:0.85;">IRP 실수령 ${korShort(irpNet)} · 연금보험 ${korShort(AB)}</span></p></div>`;
+    }
+
+    // ===== ⑤ 연금보험 단독 계산기 =====
+    function render5() {
+      const r = gnum('ins2_rate') / 100, Rpct = gnum('ins2_rate');
+      const baseP = gnum('ins2_base'), extraP = gnum('ins2_extra');
+      const pay = clampI(gnum('ins2_pay'), 1, 100);
+      const total = Math.max(pay, clampI(gnum('ins2_total'), 1, 100));
+      const bh = $('ins2_baseHint'); if (bh) bh.textContent = '월 ' + korShort(baseP / 12);
+      const rows = []; let bal = 0, prin = 0, intT = 0, feeT = 0;
+      for (let y = 1; y <= total; y++) {
+        let base = 0, fee = 0, extra = 0, net = 0;
+        if (y <= pay) { base = baseP; const fr = y <= 6 ? 0.0924 : 0.0619; fee = baseP * fr; extra = extraP; net = (baseP - fee) + extraP; feeT += fee; }
+        const interest = bal * r;
+        prin += net; intT += interest; bal = prin + intT;
+        rows.push({ year: y, base, fee, extra, net, interest, prinSum: prin, intTotal: intT, total: bal });
+      }
+      $('ins2_head').innerHTML = `<tr><th class="yr">Year</th><th>기본</th><th class="fee">사업비</th><th>추가납입</th><th>적립원금</th><th class="int"><span>이자</span><span class="pct">${Rpct}%</span></th><th>원금합계</th><th>이자총액</th><th class="tot">총 합계</th><th class="ror">총수익률</th></tr>`;
+      let h = '';
+      for (let i = 0; i < total; i++) {
+        const x = rows[i], year = i + 1, inPay = year <= pay, m = '<span class="muted">–</span>';
+        const cls = year === pay ? 'payend' : ((year % 10 === 0 || year === total) ? 'mile' : '');
+        const ror = x.prinSum > 0 ? (x.total / x.prinSum * 100).toFixed(2) + '%' : m;
+        h += `<tr class="${cls}"><td class="yr">${year}${year === pay ? '★' : ''}</td><td>${inPay ? won(x.base) : m}</td><td class="fee">${inPay ? '−' + won(x.fee) : m}</td><td>${inPay ? won(x.extra) : m}</td><td class="net">${inPay ? won(x.net) : m}</td><td>${won(x.interest)}</td><td>${won(x.prinSum)}</td><td>${won(x.intTotal)}</td><td class="col-total">${won(x.total)}</td><td class="ror">${ror}</td></tr>`;
+      }
+      $('ins2_body').innerHTML = h;
+      const B = rows[total - 1].total, paid = (baseP + extraP) * pay;
+      const card = (cls, t, v, d) => `<div class="pen-card ${cls}"><div class="t">${t}</div><div class="v">${v}</div>${d ? `<div class="d">${d}</div>` : ''}</div>`;
+      $('ins2_sum').innerHTML =
+        card('', `${total}년 뒤 총액`, korShort(B)) +
+        card('', '총 사업비', '−' + korShort(feeT), `${paid ? (feeT / paid * 100).toFixed(2) : 0}% · 추가분 0`) +
+        card('ded', '받을 때 세금', '0원 ✅', '비과세') +
+        card('hl', '실수령 (세금 0)', korShort(B));
+    }
+
+    // ===== 탭4: 생애주기 설계 =====
+    let LIFE = [
+      { age: 30, type: 'once', name: '결혼', amt: 5000 },
+      { age: 35, type: 'house', name: '내집마련', amt: 60000, loan: 40000, repay: 150 },
+      { age: 38, end: 52, type: 'mexp', name: '자녀 교육비', amt: 50 },
+      { age: 45, type: 'house', name: '갈아타기(상급지)', amt: 140000, loan: 90000, repay: 200 },
+    ];
+    let LIFE_BASE = JSON.stringify(LIFE);
+    const EVT = { house: '집 사기', once: '일시 목돈(−)', oinc: '일시 목돈(+)', mexp: '매월 지출(−)', minc: '매월 수입(+)' };
+    const escA = s => String(s == null ? '' : s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+    function renderEventsTable() {
+      $('l4_events').innerHTML = LIFE.map((e, i) => {
+        const endOn = e.type === 'mexp' || e.type === 'minc';
+        const amtOn = true;
+        const loanOn = e.type === 'house';
+        return `<tr>
+        <td><input class="age" type="number" data-i="${i}" data-f="age" value="${e.age}"></td>
+        <td><input class="age" type="number" data-i="${i}" data-f="end" value="${e.end == null ? '' : e.end}" ${endOn ? '' : 'disabled placeholder="—"'}></td>
+        <td><input class="nm" data-i="${i}" data-f="name" value="${escA(e.name || '')}"></td>
+        <td><select data-i="${i}" data-f="type">${Object.keys(EVT).map(k => `<option value="${k}"${e.type === k ? ' selected' : ''}>${EVT[k]}</option>`).join('')}</select></td>
+        <td><input class="amt" type="number" data-i="${i}" data-f="amt" value="${e.amt == null ? '' : e.amt}" placeholder="${e.type === 'house' ? '집값전체' : (e.type === 'once' ? '목돈' : '월액')}"></td>
+        <td><input class="amt" type="number" data-i="${i}" data-f="loan" value="${e.loan == null ? '' : e.loan}" ${loanOn ? '' : 'disabled placeholder="-"'}></td>
+        <td><input class="amt" type="number" data-i="${i}" data-f="repay" value="${e.repay == null ? '' : e.repay}" ${loanOn ? '' : 'disabled placeholder="-"'}></td>
+        <td><button class="del-ev" data-del="${i}" title="삭제">🗑</button></td></tr>`;
+      }).join('') || '<tr><td colspan="8" style="color:var(--text-mute);padding:14px;">이벤트가 없어요. ＋버튼으로 추가하세요.</td></tr>';
+    }
+    function simulate4() {
+      const start = clampI(gnum('l4_start'), 0, 100);
+      const end = Math.max(start, clampI(gnum('l4_end'), 1, 110));
+      const salary = gnum('l4_salary'), saveRate = gnum('l4_saverate') / 100, realloc = gnum('l4_realloc') / 100;
+      const hr = gnum('l4_houserate') / 100, pr = gnum('l4_penrate') / 100, penPct = gnum('l4_penpct') / 100;
+      const penYears = clampI(gnum('l4_penyears'), 0, 100);
+      let cash = gnum('l4_cash0'), pension = gnum('l4_pen0'), house = 0, debt = 0, repay = 0;
+      const invest = salary * saveRate;   // 1년 저축액 (고정)
+      const M = v => korShort(v * 10000);
+      const sh = $('l4_saveHint'); if (sh) sh.textContent = '1년 저축 ' + M(invest);
+      const rows = [];
+      for (let age = start; age <= end; age++) {
+        let names = [], bought = false;
+        // 일시·부동산 이벤트 (그 나이)
+        LIFE.filter(e => +e.age === age).forEach(e => {
+          const amt = parseFloat(e.amt) || 0, loan = parseFloat(e.loan) || 0, rep = parseFloat(e.repay) || 0;
+          if (e.type === 'once') { cash -= amt; names.push((e.name || '목돈') + ` −${M(amt)}`); }
+          else if (e.type === 'oinc') { cash += amt; names.push((e.name || '목돈') + ` +${M(amt)}`); }
+          else if (e.type === 'house') {
+            if (house > 0) cash += (house - debt);   // 이전 집 자동 매도 → 판 돈(시세−대출) 현금으로
+            cash -= (amt - loan);                     // 새 집 자기자본(집값−대출) 현금에서
+            house = amt; debt = loan; repay = rep; bought = true;   // 집값·대출 그대로, 산 해는 상승 안 함
+            names.push((e.name || '집') + ` 집값 ${M(amt)}/대출 ${M(loan)}`);
+          }
+        });
+        // 매월 지출·수입 (시작~종료 기간, 연 = 월×12)
+        LIFE.forEach(e => {
+          const s = parseInt(e.age) || 0, en = (e.end === '' || e.end == null) ? end : (parseInt(e.end) || 0);
+          if (e.type === 'mexp' && age >= s && age <= en) { cash -= (parseFloat(e.amt) || 0) * 12; if (age === s) names.push((e.name || '지출') + ' 시작'); }
+          else if (e.type === 'minc' && age >= s && age <= en) { cash += (parseFloat(e.amt) || 0) * 12; if (age === s) names.push((e.name || '수입') + ' 시작'); }
+        });
+        // 저축 분배 (연금 끝나면 그 몫도 부동산으로 = A)
+        const yrs = age - start;
+        const penIn = (yrs < penYears) ? invest * (1 - realloc) : 0;
+        const realIn = invest - penIn;
+        cash += realIn;                  // 현금: 복리로 안 굴림
+        if (!bought) house = house * (1 + hr);   // 집값 상승 (단, 산 해는 그대로 → 다음 해부터)
+        debt = Math.max(0, debt - repay * 12);
+        pension = pension * (1 + pr) + penIn;   // 연금: 복리
+        const total = house + cash, net = total - debt, annu = pension * penPct;
+        const penDone = (penYears > 0 && age === start + penYears - 1);
+        rows.push({ age, house, cash, debt, total, net, pension, annu, names, penDone });
+      }
+      $('l4_head').innerHTML = `<tr><th class="yr">나이</th><th>집 시세</th><th>현금</th><th>대출</th><th>총자산</th><th class="tot">순자산</th><th>연금총액</th><th>매년적립금</th></tr>`;
+      $('l4_body').innerHTML = rows.map(r => {
+        const mm = '<span class="muted">–</span>';
+        const ev = r.names.length ? escA(r.names.join(', ')) : '';
+        return `<tr class="${r.names.length ? 'payend' : ''}"><td class="yr">${r.age}세${r.penDone ? ' <span style="color:#16a34a;font-size:0.78em;font-weight:700;">✓연금완납</span>' : ''}${ev ? ' <span style="color:var(--brand-dk);font-size:0.8em;">' + ev + '</span>' : ''}</td><td>${r.house ? M(r.house) : mm}</td><td>${M(r.cash)}</td><td>${r.debt ? M(r.debt) : mm}</td><td>${M(r.total)}</td><td class="col-total ${r.net < 0 ? 'neg' : ''}">${M(r.net)}</td><td>${M(r.pension)}</td><td>${M(r.annu)}</td></tr>`;
+      }).join('');
+      const last = rows[rows.length - 1];
+      const card = (cls, t, v, d) => `<div class="pen-card ${cls}"><div class="t">${t}</div><div class="v">${v}</div>${d ? `<div class="d">${d}</div>` : ''}</div>`;
+      $('l4_summary').innerHTML =
+        card('hl', `${end}세 순자산`, M(last ? last.net : 0)) +
+        card('', `${end}세 총자산`, M(last ? last.total : 0)) +
+        card('', '연금 총액', M(last ? last.pension : 0)) +
+        card('', '매년 예상 적립금', M(last ? last.annu : 0), '연금 × ' + gnum('l4_penpct') + '%');
+      drawLifeChart(rows);
+    }
+    function drawLifeChart(rows) {
+      const el = $('l4_chart'); if (!el) return; if (!rows.length) { el.innerHTML = ''; return; }
+      const W = 760, H = 240, padL = 8, padR = 8, padT = 16, padB = 28, n = rows.length;
+      const maxV = Math.max(...rows.map(r => r.total), 1), minV = Math.min(0, ...rows.map(r => r.net)), range = (maxV - minV) || 1;
+      const px = i => padL + (W - padL - padR) * (n > 1 ? i / (n - 1) : 0);
+      const py = v => H - padB - (H - padT - padB) * ((v - minV) / range);
+      const lineNet = rows.map((r, i) => (i ? 'L' : 'M') + px(i).toFixed(1) + ' ' + py(r.net).toFixed(1)).join(' ');
+      const lineTot = rows.map((r, i) => (i ? 'L' : 'M') + px(i).toFixed(1) + ' ' + py(r.total).toFixed(1)).join(' ');
+      let dots = ''; rows.forEach((r, i) => { if (r.names.length) dots += `<circle cx="${px(i).toFixed(1)}" cy="${py(r.net).toFixed(1)}" r="3.5" fill="#dc2626"/>`; });
+      let xl = ''; [0, Math.floor((n - 1) / 2), n - 1].forEach(i => { xl += `<text x="${px(i).toFixed(1)}" y="${H - 8}" font-size="10" fill="#9aa3b2" text-anchor="middle">${rows[i].age}세</text>`; });
+      const M = v => korShort(v * 10000);
+      el.innerHTML = `<svg class="linechart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">` +
+        `<line x1="${padL}" y1="${py(0).toFixed(1)}" x2="${W - padR}" y2="${py(0).toFixed(1)}" stroke="#e4e7ec"/>` +
+        `<text x="${padL + 2}" y="${(py(maxV) + 10).toFixed(1)}" font-size="10" fill="#9aa3b2">${M(maxV)}</text>` +
+        `<path d="${lineTot}" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="4 4"/>` +
+        `<path d="${lineNet}" fill="none" stroke="#ff6a00" stroke-width="3"/>` + dots + xl + `</svg>`;
+    }
+    function render4() { renderEventsTable(); simulate4(); }
+
+    // 기본 조건 추가/삭제 (정해진 조건을 화면에서 빼고·다시 넣기)
+    function renderHiddenConds() {
+      const grid = $('condGrid'); if (!grid) return;
+      const hidden = [...grid.querySelectorAll('.field')].filter(f => f.style.display === 'none');
+      $('condHidden').innerHTML = hidden.length
+        ? ('빠진 조건 (눌러서 다시 추가): ' + hidden.map(f => `<span class="cond-chip" data-show="${f.dataset.cond}">＋ ${f.dataset.label}</span>`).join(''))
+        : '<span style="color:var(--text-mute);">표시할 조건이 모두 나와 있어요. 각 칸 오른쪽 위 <b>×</b>로 빼면 여기서 다시 추가할 수 있어요.</span>';
+    }
+    function initConditions() {
+      const grid = $('condGrid'); if (!grid) return;
+      grid.querySelectorAll('.field').forEach(f => {
+        const inp = f.querySelector('input'); if (!inp || f.dataset.cond) return;
+        f.dataset.cond = inp.id;
+        const lab = f.querySelector('label'); f.dataset.label = lab ? lab.textContent : inp.id;
+        const x = document.createElement('button'); x.className = 'cond-x'; x.type = 'button'; x.textContent = '×'; x.title = '이 조건 빼기';
+        x.addEventListener('click', () => { f.style.display = 'none'; renderHiddenConds(); });
+        f.appendChild(x);
+      });
+      const hid = $('condHidden');
+      if (hid) hid.addEventListener('click', e => {
+        const c = e.target.closest('[data-show]'); if (!c) return;
+        const f = grid.querySelector('.field[data-cond="' + c.dataset.show + '"]'); if (f) f.style.display = '';
+        renderHiddenConds();
+      });
+      const addBtn = $('condAdd');
+      if (addBtn) addBtn.addEventListener('click', () => { const h = $('condHidden'); h.style.display = (h.style.display === 'none' || !h.style.display) ? 'flex' : 'none'; });
+      renderHiddenConds();
+    }
+
+    // 입력 → 해당 계산기만 재계산
+    document.addEventListener('input', e => {
+      if (e.target.closest('#t1')) render('s');
+      else if (e.target.closest('#t2')) render('c');
+      else if (e.target.closest('#t3')) { if (e.target.id && e.target.id.indexOf('ins2_') === 0) render5(); else render3(); }
+      else if (e.target.closest('#t4')) {
+        const i = e.target.dataset.i;
+        if (i !== undefined) {
+          const f = e.target.dataset.f, v = e.target.value;
+          LIFE[i][f] = (f === 'name' || f === 'type') ? v : (f === 'end' ? (v === '' ? '' : (parseFloat(v) || 0)) : (parseFloat(v) || 0));
+        }
+        simulate4();
+      }
+    });
+    document.addEventListener('change', e => {
+      const t = e.target;
+      if (t.closest('#t4') && t.dataset.i !== undefined) {
+        const f = t.dataset.f; LIFE[t.dataset.i][f] = (f === 'name' || f === 'type') ? t.value : (f === 'end' ? (t.value === '' ? '' : (parseFloat(t.value) || 0)) : (parseFloat(t.value) || 0));
+        renderEventsTable(); simulate4();
+      }
+    });
+
+    // 기본값 저장/리셋
+    const RENDER = { s: () => render('s'), c: () => render('c'), p: render3, ins2: render5, l4: render4 };
+    function renderAll() { render('s'); render('c'); render3(); render5(); render4(); }
+    function applyDefaults() { Object.keys(DEF).forEach(k => { const el = $(k); if (el) el.value = DEF[k]; }); renderAll(); }
+    async function loadDefaults() {
+      if (typeof SB !== 'undefined') {
+        try {
+          const { data } = await SB.from('app_config').select('value').eq('key', 'finance_defaults').maybeSingle();
+          if (data && data.value) {
+            const v = data.value;
+            if (Array.isArray(v._life) && v._life.every(e => EVT[e.type])) { LIFE = v._life; LIFE_BASE = JSON.stringify(LIFE); }
+            DEF = { ...HARD }; Object.keys(HARD).forEach(k => { if (v[k] !== undefined) DEF[k] = v[k]; });
+          }
+        } catch (e) {}
+      }
+      applyDefaults();
+    }
+    async function saveDefaults() {
+      if (!isBoss) { alert('기본값 저장은 관리자만 할 수 있어요.'); return; }
+      const cur = {};
+      Object.keys(HARD).forEach(k => { const el = $(k); if (el) cur[k] = parseFloat(el.value) || 0; });
+      try {
+        await SB.from('app_config').upsert({ key: 'finance_defaults', value: { ...cur, _life: LIFE }, updated_at: new Date().toISOString() });
+        DEF = { ...HARD, ...cur }; LIFE_BASE = JSON.stringify(LIFE);
+        alert('✅ 현재 값(생애 이벤트 포함)을 기본값으로 저장했어요. 모두에게 이 값이 기본으로 보입니다.');
+      } catch (e) { alert('저장 실패: ' + (e.message || e)); }
+    }
+    document.addEventListener('click', e => {
+      if (e.target.closest('[data-save]')) { saveDefaults(); return; }
+      if (e.target.closest('#l4_add')) { LIFE.push({ age: 50, name: '새 이벤트', type: 'house', amt: 0, loan: 0, repay: 0 }); render4(); return; }
+      const del = e.target.closest('[data-del]'); if (del) { LIFE.splice(+del.dataset.del, 1); render4(); return; }
+      const btn = e.target.closest('[data-reset]'); if (!btn) return;
+      const key = btn.dataset.reset;
+      (FIELDS[key] || []).forEach(f => { const el = $(f); if (el) el.value = DEF[f]; });
+      if (key === 'l4') LIFE = JSON.parse(LIFE_BASE);
+      (RENDER[key] || function () {})();
+    });
+    // 탭 전환
+    $('tabs').addEventListener('click', e => {
+      const btn = e.target.closest('button[data-tab]'); if (!btn) return;
+      document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === btn.dataset.tab));
+    });
+
+    if (isBoss) document.querySelectorAll('.boss-only').forEach(b => { b.style.display = 'inline-flex'; });
+    applyDefaults();   // 코드 기본값으로 즉시 표시
+    initConditions();  // 기본 조건 ×삭제/＋추가 버튼 부착
+    loadDefaults();    // 저장된 기본값 있으면 불러와 덮어씀
+  </script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

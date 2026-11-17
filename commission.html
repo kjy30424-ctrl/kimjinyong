@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>수수료 계산기 · 지사 포털</title>
+  <script>
+    // 지사장 전용 페이지 — 사원/미로그인 접근 차단 (내용 노출 전 차단)
+    (function () {
+      var a = null;
+      try { a = JSON.parse(localStorage.getItem('hwAuth') || 'null'); } catch (e) {}
+      if (!a) { location.href = 'login.html'; }
+      else if (a.role !== 'boss') { location.href = 'index.html'; }
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .note { background: var(--brand-sft); border: 1px solid #ffd9b8; border-radius: 12px; padding: 14px 18px; font-size: 0.88rem; color: #8a4b00; margin-bottom: 22px; }
+    .note b { color: var(--brand-dk); }
+    details.settings { margin-bottom: 24px; }
+    details.settings > summary { cursor: pointer; font-weight: 700; font-size: 1rem; padding: 16px 22px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); list-style: none; display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow-sm); }
+    details.settings > summary::-webkit-details-marker { display: none; }
+    details.settings > summary .chev { color: var(--text-soft); font-size: 0.85rem; }
+    details.settings[open] > summary { border-radius: var(--radius) var(--radius) 0 0; border-bottom: none; }
+    .settings-body { background: var(--surface); border: 1px solid var(--line); border-top: none; border-radius: 0 0 var(--radius) var(--radius); padding: 18px 22px 22px; }
+    .calc-num { width: 80px; text-align: right; padding: 6px 8px; border: 1.5px solid var(--line-2); border-radius: 8px; font-size: 0.85rem; font-family: inherit; font-variant-numeric: tabular-nums; }
+    .calc-num:focus { outline: none; border-color: var(--brand); }
+    .calc-name { width: 130px; padding: 6px 8px; border: 1.5px solid var(--line-2); border-radius: 8px; font-size: 0.85rem; font-family: inherit; font-weight: 600; }
+    .calc-name:focus { outline: none; border-color: var(--brand); }
+    .w-num { width: 74px; text-align: right; padding: 6px 8px; border: 1.5px solid #f0d98a; background: #fff8db; color: #1d4ed8; font-weight: 700; border-radius: 8px; font-size: 0.85rem; font-family: inherit; font-variant-numeric: tabular-nums; }
+    .w-num:focus { outline: none; border-color: var(--brand); }
+    .calc-sel { padding: 6px 8px; border: 1.5px solid var(--line-2); border-radius: 8px; font-size: 0.85rem; font-family: inherit; }
+    .calc-tbl th, .calc-tbl td { padding: 10px 12px; }
+    .calc-tbl .lbl { font-weight: 600; }
+    .sub-th { font-size: 0.72rem !important; color: var(--text-mute); font-weight: 600; }
+    .del-btn { background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0.55; }
+    .del-btn:hover { opacity: 1; }
+    .ct-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+    .ct-file { position:relative; cursor:pointer; }
+    .ct-file input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
+    .ct-chips { display:flex; gap:8px; flex-wrap:wrap; margin:4px 0 14px; }
+    .chip { background:var(--brand-sft); color:var(--brand-dk); border:1px solid #ffd9b8; border-radius:999px; padding:5px 12px; font-size:0.82rem; font-weight:700; }
+    .chip.warn { background:#fff6d6; border-color:#e8c44a; color:#8a6300; }
+    .chip.ok { background:#e9f7ee; border-color:#a8dcb9; color:#1d6b3a; }
+    .ct-tbl th { white-space:nowrap; font-size:0.78rem; position:sticky; top:0; background:var(--surface); }
+    .ct-tbl td { padding:5px 6px; }
+    .ct-tbl tbody tr:nth-child(even) { background:rgba(0,0,0,0.018); }
+    .ct-tbl tr.ct-flag { background:#fff8e1 !important; }
+    .ct-tbl select, .ct-tbl input[type=text] { width:100%; min-width:84px; border:1px solid var(--line); border-radius:8px; padding:5px 6px; font:inherit; font-size:0.84rem; background:#fff; }
+    .ct-tbl input.ct-w { width:78px; text-align:right; background:#eef4ff; border:1px solid #c9dafc; border-radius:8px; padding:5px 6px; font:inherit; font-size:0.84rem; }
+    .ct-tbl input.ct-pct { width:46px; text-align:right; border:1px solid var(--line); border-radius:8px; padding:5px 4px; font:inherit; font-size:0.84rem; }
+    .ct-tbl .ct-sub{display:block;color:var(--text-mute);font-size:.74rem;font-weight:400;margin-top:2px;}
+    .ct-tbl .ct-sh { display:flex; gap:4px; align-items:center; }
+    .ct-tbl td.calc { font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; color:var(--text); }
+    .ct-tbl td.calc.dim { color:var(--text-mute); }
+    .ct-imp { display:flex; gap:8px; align-items:center; background:#f4f8ff; border:1px solid #c9dafc; border-radius:12px; padding:8px 12px; font-size:0.86rem; }
+    .ct-help { font-size:0.78rem; color:var(--text-mute); margin-top:10px; line-height:1.6; }
+    .lock-note { background:#fff6d6; border:1px solid #e8c44a; color:#8a6300; border-radius:10px; padding:8px 12px; font-size:0.84rem; margin-bottom:10px; }
+    .ov-card { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 16px; }
+    .ov-item { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow-sm); }
+    .ov-item .t { font-size: 0.85rem; color: var(--text-soft); }
+    .ov-item .v { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.6px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .ov-item .v small { font-size: 0.9rem; color: var(--text-soft); font-weight: 600; }
+    .ov-item .d { font-size: 0.76rem; color: var(--text-mute); margin-top: 4px; }
+    /* 끌어서 순서 변경 (손잡이 ⠿ 를 잡고 끈다 — candidates.html과 같은 방식) */
+    .drag { cursor: grab; color: #aeb4c0; font-size: 1.05rem; padding: 0 5px; user-select: none; }
+    .drag:hover { color: var(--brand-dk); }
+    .drag:active { cursor: grabbing; }
+    .calc-tbl td.grip { width: 28px; padding-left: 6px; padding-right: 0; }
+    tr.dragging { opacity: 0.35; }
+    tr.drop-before td { box-shadow: inset 0 2px 0 0 var(--brand); }
+    tr.drop-after td { box-shadow: inset 0 -2px 0 0 var(--brand); }
+      .tl-tbl th { white-space:nowrap; font-size:0.76rem; position:sticky; top:0; background:var(--surface); z-index:1; }
+    .tl-tbl td { padding:6px 8px; font-variant-numeric:tabular-nums; }
+    .tl-tbl tr.tl-cur td { background:#fff1e3; font-weight:600; }
+    .tl-tbl tr.tl-past td { color:var(--text-mute); }
+        .tl-small { font-size:0.74rem; }
+    .tl-small td, .tl-small th { padding:4px 6px !important; }
+    .tl-note { font-size:0.78rem; color:var(--text-mute); margin-top:10px; line-height:1.7; }
+  </style>
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="commission"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div>
+          <h1>수수료 계산기</h1>
+          <div class="sub">월초 입력 → 수수료·시책·오버라이딩·법인시책 자동 계산 (지사장 전용)</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost" id="resetBtn">↺ 기본값 초기화</button>
+    </header>
+
+    <div class="content">
+      <div class="note" style="background:#eef4ff;border-color:#c9dafc;color:#1f3d7a;">📋 <b>이번 달 계약은 아래 「계약 건별 입력」</b>에 한 건씩 넣거나 계약공유방 카톡 내보내기(txt)를 불러오세요. 오버라이딩 · 법인시책 · 쉐어 · 세금 · 실제 수령이 자동 계산됩니다. (건이 하나도 없으면 아래 월초 입력표 방식으로 계산됩니다)</div>
+      <div class="note">
+        💡 <b>월초(만원)</b>만 입력하면 자동 계산. <b>카디프 일시납</b>은 납입금액을 월초로 바꿔 넣습니다 — <b>1억 = 월초 76</b> (5천만 = 38, 3천만 = 22.8). 월초에 그대로 잡히고 수수료·시책은 일시납 금액으로 계산됩니다. 상품·팀원 모두 추가/삭제·수정 가능합니다.
+        법인시책은 <b>합산 × 율 × 지사장 수령 비율</b>만 지사장 수령(나머지는 회사분 제외). <b>김태연 파트 월초는 법인시책 계산에서 제외</b>(지사장 미수령 — 팀원 설정의 '제외' 체크로 조정). 비율은 아래 기준값 설정에서 조정. 입력값은 자동 저장되어 <b>영업현황·대시보드에도 반영</b>됩니다.
+      </div>
+
+      <div class="panel" id="contractPanel">
+        <div class="panel-head"><h2>📋 계약 건별 입력</h2><span style="color:var(--text-mute); font-size:0.82rem;">한 건씩 넣으면 오버라이딩 · 법인시책 · 쉐어 · 세금까지 전부 자동 계산 (계약자 이름은 개인정보라 저장하지 않고, 호 번호와 속성으로만 구분합니다)</span></div>
+        <div class="panel-body">
+          <div class="ct-bar">
+            <button class="btn btn-ghost" id="ctAdd" style="border-color:var(--brand); color:var(--brand-dk); font-weight:700;">➕ 계약 한 건 추가</button>
+            <label class="btn btn-ghost ct-file">📥 계약공유방 카톡 내보내기(txt) 불러오기<input type="file" id="ctFile" accept=".txt,text/plain"></label>
+            <span id="ctImport"></span>
+            <button class="btn btn-ghost" id="ctClear" style="margin-left:auto;">🧹 건별 전부 지우기</button>
+          </div>
+          <div class="ct-chips" id="ctChips"></div>
+          <div style="overflow-x:auto; max-height:560px; overflow-y:auto; border:1px solid var(--line); border-radius:12px;">
+            <table class="tbl calc-tbl ct-tbl">
+              <thead><tr><th>호</th><th>계약진행사원</th><th>상품</th><th class="num">월초(만원)</th><th title="쉐어 %만큼 월초를 나눠 보여줍니다(표시용)">월초 배분</th><th>속성 메모</th><th>쉐어 ① 상대 · 세후 %</th><th>쉐어 ② 상대 · 세후 %</th><th class="num" title="계약진행사원 테이블로 계산한 금액. 세전 = 전산 수수료명세와 같은 기준, 세후 = 세금 3.3%를 뗀 값">세전 · 세후<br><span style="font-weight:400;font-size:.7rem;">쉐어 기준</span></th><th class="num" title="쉐어 % 몫. 세전 = 전산 표기용, 세후 = 실제 송금액">쉐어 합<br><span style="font-weight:400;font-size:.7rem;">세전 · 세후</span></th><th class="num" title="앞으로 들어올 후속 수수료 + 2차년도 시책 (세후, 쉐어 기준)">후속·2차 세후</th><th class="num">총 세후<br><span style="font-weight:400;font-size:.7rem;">익월+후속</span></th><th></th></tr></thead>
+              <tbody id="ctBody"></tbody>
+            </table>
+          </div>
+          <div class="ct-help">
+            · <b>월초 배분</b> = 쉐어 %만큼 월초를 나눠 보여주는 표시용 칸입니다(예: 50 + 쉐어 50% → 박효은 25 · 김영찬 25). 아래 월초 입력표·영업현황의 월초 성적도 이렇게 나눈 값으로 보입니다. 수수료·오버라이딩 계산은 계약진행사원 기준 그대로입니다.<br>
+            · <b>쉐어 %</b> = 계약진행사원 테이블로 계산한 세전에서 세금 3.3%를 뗀 <b>세후 금액의 %</b>입니다 (보통 50, 부캐님 계약은 100, 효라클 원베일리처럼 둘로 나누면 50 + 25). 남는 몫은 계약진행사원 본인에게 갑니다. 표의 <b>세전·세후</b>·<b>쉐어 합</b> 칸은 위 줄이 세전(전산 표기 기준), 아래 작은 줄이 세후(세금 3.3% 뗀 값, 쉐어는 실제 송금액)입니다.<br>
+            · 지점장이 계약한 건을 쉐어로 나눌 때 쓰는 테이블: <input type="number" class="calc-num" id="bossShareTbl" value="75" step="1" style="width:64px;"> (본인 수령은 지점장 테이블 그대로)<br>
+            · 노란 줄은 자동 변환에서 확인이 필요한 건입니다(⚠ 위에 마우스를 올리면 이유가 나옵니다). 호버 말고 직접 고쳐도 바로 반영됩니다.
+          </div>
+        </div>
+      </div>
+
+      <details class="settings" open>
+        <summary>⚙️ 기준값 설정 (전부 수정 가능) <span class="chev">▾ 접기</span></summary>
+        <div class="settings-body">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <h3 style="font-size:0.95rem;">상품별 요율·시책 (단위 %)</h3>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-ghost" id="migrateBtn" style="display:none; border-color:var(--brand); color:var(--brand-dk); font-weight:700;">🆕 2026-07 새 손보체계 적용</button>
+              <button class="btn btn-ghost" id="addCardifBtn" style="display:none; border-color:var(--brand); color:var(--brand-dk); font-weight:700;">➕ 카디프생명 연금 추가</button>
+              <button class="btn btn-ghost" id="ibk460Btn" style="display:none; border-color:var(--brand); color:var(--brand-dk); font-weight:700;">🔧 IBK 익월 460% 적용</button>
+              <button class="btn btn-ghost" id="addProduct">➕ 상품 추가</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+          <table class="tbl calc-tbl" id="rateTbl">
+            <thead>
+              <tr>
+                <th rowspan="2" style="width:28px;"></th>
+                <th rowspan="2">상품명</th>
+                <th colspan="2" style="text-align:center; border-bottom:1px solid var(--line);">수수료 (회사100% 기준)</th>
+                <th colspan="2" style="text-align:center; border-bottom:1px solid var(--line);">개인시책</th>
+                <th colspan="2" style="text-align:center; border-bottom:1px solid var(--line);">법인시책</th>
+                <th rowspan="2" style="min-width:150px;">후속 지급 방식</th>
+                <th rowspan="2"></th>
+              </tr>
+              <tr>
+                <th class="sub-th num">익월</th><th class="sub-th num">후속*</th>
+                <th class="sub-th num">익월</th><th class="sub-th num">2차년도</th>
+                <th class="sub-th num">익월</th><th class="sub-th num">2차년도</th>
+              </tr>
+            </thead>
+            <tbody id="rateBody"></tbody>
+          </table>
+          </div>
+          <div style="font-size:0.78rem; color:var(--text-mute); margin-top:8px;">* 후속 = 손보(인보험·운전자): 13~14회+15회 합산 / IBK: 2·3차년도 / 미래에셋: 2차년도 / 카디프생명 연금(적립형): 2차년도 117.6 + 3차년도 117.6 = 235.2 · 시책 "2차년도" = 주차시상+주력상품(일반)만 (기준: 손보수수료체계_2026-07.md) · 카디프 적립형 시책은 2026년 7월 생보 시책표 기준(개인 익월 60 / 법인 익월 10, 2차년도는 표에 '–'라 0) · <b>카디프 일시납</b>은 1억 = 월초 76 환산이라 요율이 역산값(197.37 / 131.58)입니다 — 월초 76 × 197.37% = 150만원(= 1억 × 1.5%)</div>
+
+          <div style="margin-top:20px;">
+            <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">법인시책 지사장 수령 비율</label>
+            <input type="number" class="calc-num" id="share" data-k="share" value="75" step="1"> %
+            <div style="font-size:0.78rem; color:var(--text-mute); margin-top:4px;">※ 이 칸 숫자를 바꾸면 전 직원 화면·대시보드에 자동 반영됩니다.</div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:22px 0 10px;">
+            <h3 style="font-size:0.95rem;">팀원 (추가·삭제·역할·테이블)</h3>
+            <button class="btn btn-ghost" id="addPerson">➕ 팀원 추가</button>
+          </div>
+          <table class="tbl calc-tbl"><thead><tr><th style="width:28px;"></th><th>이름</th><th>역할</th><th>테이블</th><th>파트</th><th>파트장</th><th>법인시책</th><th></th></tr></thead><tbody id="pplBody"></tbody></table>
+          <div style="font-size:0.78rem; color:var(--text-mute); margin-top:6px;">※ '제외' 체크된 사람의 월초는 법인시책 계산에서 빠집니다 (해당 파트 몫은 지사장 미수령 — 기본: 김태연). ※ 상품·팀원 순서는 맨 앞 ⠿ 를 잡고 끌어서 바꿉니다 — 월초 입력표·수수료표에도 같은 순서로 반영됩니다.</div>
+        </div>
+      </details>
+
+      <div class="panel">
+        <div class="panel-head"><h2>월초 입력 (만원)</h2><span style="color:var(--text-mute); font-size:0.82rem;">파란 칸에 입력</span><button class="btn btn-ghost" id="zeroWolchoBtn" style="margin-left:auto; border-color:var(--brand); color:var(--brand-dk); font-weight:700;">🧹 월초 전부 0으로</button></div>
+        <div class="panel-body" style="overflow-x:auto;">
+          <table class="tbl calc-tbl">
+            <thead id="wolchoHead"></thead>
+            <tbody id="wolchoBody"></tbody>
+            <tfoot id="wolchoFoot"></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>① 팀원별 수수료 (본인 영업분)</h2><span style="color:var(--text-mute); font-size:0.82rem;">단위: 만원</span></div>
+        <div class="panel-body" style="overflow-x:auto;">
+          <table class="tbl calc-tbl">
+            <thead><tr><th>이름</th><th class="num">테이블</th><th class="num">익월 수수료</th><th class="num">후속 수수료</th><th class="num">개인시책</th><th class="num">본인 합계</th></tr></thead>
+            <tbody id="resBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>② 오버라이딩 · 법인시책</h2></div>
+        <div class="panel-body"><div class="ov-card" id="ovCard"></div></div>
+      </div>
+
+      <div class="panel" id="timelinePanel" style="display:none;">
+        <div class="panel-head"><h2>📆 ⑤ 월별 수령 예상 (모든 달 계약 합산)</h2><span style="color:var(--text-mute); font-size:0.82rem;">앞으로 들어올 후속·2차년도 + 예전 계약분 · 단위: 만원</span></div>
+        <div class="panel-body">
+          <div class="ct-bar"><label style="font-weight:700;">사람 선택 <select id="tlWho" class="calc-sel"></select></label></div>
+          <div style="overflow:auto; max-height:560px;" id="tlBody"></div>
+          <h3 style="font-size:0.9rem; margin:18px 0 8px;">🔽 후속분만 따로 (작게)</h3>
+          <div style="overflow:auto; max-height:340px;" id="tlLater"></div>
+          <div class="tl-note">· 지급월은 <b>수수료 TYPE표 회차 기준 추정</b>입니다(회차 n = 계약월 + n개월, 익월 = 계약월 + 1). 손보 인보험·운전자·건강은 13·14·15회, IBK·카디프 적립·메트라이프는 13~36회 월분할, 미래에셋 연금은 13~24회 월분할, 카디프 일시납은 13회·25회, 그 밖의 상품은 13회 일괄(회차 미확인)로 넣었습니다. 상품별 방식은 수수료 계산기 「기준값 설정」에서 바꿀 수 있습니다.<br>· 후속 수수료는 요율표의 「후속」 값, 2차년도 시책은 「개인시책 2차년도」 · 법인시책 2차년도 값을 씁니다. 청약철회·해지·환수·메트라이프 RB(37회차)·GC는 반영하지 않았습니다.<br>· 쉐어는 건별로 지정한 %를 후속 지급에도 똑같이 적용합니다(세금 3.3% 뗀 금액 기준).</div>
+        </div>
+      </div>
+
+      <div class="panel" id="settlePanel" style="display:none;">
+        <div class="panel-head"><h2>④ 다음 달 실제 수령 (세금 · 쉐어 반영)</h2><span style="color:var(--text-mute); font-size:0.82rem;">전산에서 직접 받는 돈 − 세금 3.3% − 쉐어 송금 + 쉐어 받는 몫 · 단위: 만원</span></div>
+        <div class="panel-body" style="overflow-x:auto;"><table class="tbl calc-tbl"><thead><tr><th>이름</th><th>직책</th><th class="num">본인 계약</th><th class="num">오버라이딩</th><th class="num">법인시책</th><th class="num">세전 합계</th><th class="num">세금 3.3%</th><th class="num">쉐어 지급</th><th class="num">쉐어 수령</th><th class="num">다음 달 실수령<br><span style="font-weight:400;font-size:.7rem;">이번 달 계약 익월분</span></th><th class="num" title="과거 계약에서 다음 달에 같이 들어오는 후속·2차년도(세금·쉐어 반영)">+ 과거 계약 후속분</th><th class="num">다음 달 총 수령</th></tr></thead><tbody id="settleBody"></tbody></table></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>③ 총수령 (지사장)</h2></div>
+        <div class="panel-body"><div class="stat-grid" id="bossCards"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script src="commission-core.js"></script>
+  <script src="commission-import.js"></script>
+  <script>
+    const esc = s => String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const gnum = v => parseFloat(v) || 0;
+    const fmt = HW.fmt;
+    const S = HW.state;
+
+    function renderRate() {
+      document.getElementById('rateBody').innerHTML = S.products.map(p => `
+        <tr data-id="${p.id}">
+          <td class="grip"><span class="drag" title="끌어서 순서 변경">⠿</span></td>
+          <td><input class="calc-name" data-k="pname" data-prod="${p.id}" value="${esc(p.name)}"></td>
+          <td class="num"><input class="calc-num" data-k="prate" data-prod="${p.id}" data-f="ik"   value="${p.ik}"   step="0.1"></td>
+          <td class="num"><input class="calc-num" data-k="prate" data-prod="${p.id}" data-f="hu"   value="${p.hu}"   step="0.1"></td>
+          <td class="num"><input class="calc-num" data-k="prate" data-prod="${p.id}" data-f="siIk" value="${p.siIk}" step="1"></td>
+          <td class="num"><input class="calc-num" data-k="prate" data-prod="${p.id}" data-f="si13" value="${p.si13}" step="1"></td>
+          <td class="num"><input class="calc-num" data-k="prate" data-prod="${p.id}" data-f="coIk" value="${p.coIk}" step="1"></td>
+          <td class="num"><input class="calc-num" data-k="prate" data-prod="${p.id}" data-f="co13" value="${p.co13}" step="1"></td>
+          <td><select class="calc-sel" data-k="psched" data-prod="${p.id}" style="font-size:0.78rem;"><option value="">자동 (${esc(HW.SCHED[HW.schedKey(Object.assign({}, p, { sched: '' }))].label)})</option>${Object.keys(HW.SCHED).map(k => `<option value="${k}"${p.sched === k ? ' selected' : ''}>${esc(HW.SCHED[k].label)}</option>`).join('')}</select></td>
+          <td><button class="del-btn" data-act="delprod" data-prod="${p.id}" title="상품 삭제">🗑</button></td>
+        </tr>`).join('');
+    }
+    function renderPeople() {
+      document.getElementById('pplBody').innerHTML = S.people.map(p => {
+        if (p.role === 'boss') {
+          const opts = HW.TABLE_OPTS.boss.map(t => `<option value="${t}"${t===p.table?' selected':''}>${t}테이블</option>`).join('');
+          return `<tr data-id="${p.id}"><td class="grip"><span class="drag" title="끌어서 순서 변경">⠿</span></td><td class="lbl">지점장</td><td style="color:var(--text-soft);font-size:0.85rem;">지점장 (본인영업+오버+법인시책)</td><td><select class="calc-sel" data-k="ptable" data-per="${p.id}">${opts}</select></td><td></td><td></td><td></td><td></td></tr>`;
+        }
+        const roleSel = `<select class="calc-sel" data-k="prole" data-per="${p.id}"><option value="jijeom"${p.role==='jijeom'?' selected':''}>지점장</option><option value="fc"${p.role==='fc'?' selected':''}>지점원</option></select>`;
+        const opts = HW.TABLE_OPTS[p.role].map(t => `<option value="${t}"${t===p.table?' selected':''}>${t}테이블</option>`).join('');
+        return `<tr data-id="${p.id}">
+          <td class="grip"><span class="drag" title="끌어서 순서 변경">⠿</span></td>
+          <td><input class="calc-name" data-k="pn" data-per="${p.id}" value="${esc(p.name)}"></td>
+          <td>${roleSel}</td>
+          <td><select class="calc-sel" data-k="ptable" data-per="${p.id}">${opts}</select></td>
+          <td>${p.role === 'fc' ? `<select class="calc-sel" data-k="ppart" data-per="${p.id}">${['', '1파트', '2파트', '3파트'].map(x => `<option value="${x}"${(p.part || '') === x ? ' selected' : ''}>${x || '직할(한채혁)'}</option>`).join('')}</select>` : ''}</td>
+          <td>${p.role === 'fc' && p.part ? `<label style="font-size:0.82rem; white-space:nowrap; cursor:pointer;"><input type="checkbox" data-k="pleader" data-per="${p.id}"${p.leader ? ' checked' : ''}> 파트장</label>` : ''}</td>
+          <td><label style="font-size:0.82rem; white-space:nowrap; cursor:pointer;"><input type="checkbox" data-k="pnocorp" data-per="${p.id}"${HW.isNoCorp(p) ? ' checked' : ''}> 제외</label></td>
+          <td><button class="del-btn" data-act="delperson" data-per="${p.id}" title="팀원 삭제">🗑</button></td>
+        </tr>`;
+      }).join('');
+    }
+    function renderWolcho() {
+      const prods = S.products;
+      const cm = HW.contractsMode(); const WS = cm ? HW.deriveWolchoShared() : S.wolcho;
+      document.getElementById('wolchoHead').innerHTML =
+        `<tr><th>이름</th><th class="num">테이블</th>${prods.map(p => `<th class="num" id="wth_${p.id}">${esc(p.name)}</th>`).join('')}</tr>`;
+      document.getElementById('wolchoBody').innerHTML = S.people.map(per =>
+        `<tr><td class="lbl" id="pn_${per.id}">${esc(per.name)}</td><td class="num" id="tv_${per.id}">${per.table}</td>${prods.map(pr =>
+          `<td class="num"><input class="w-num" data-k="w" data-per="${per.id}" data-prod="${pr.id}" value="${WS[per.id]?.[pr.id] || 0}" step="1"${cm ? ' disabled style="opacity:.7;"' : ''}></td>`).join('')}</tr>`).join('');
+      document.getElementById('wolchoFoot').innerHTML =
+        `<tr class="total-row"><td>지사 합계</td><td></td>${prods.map(p => `<td class="num" id="sumw_${p.id}">-</td>`).join('')}</tr>` +
+        (cm ? '' : `<tr><td class="lbl" title="제외 대상(김태연)이 진행했지만 월초를 쉐어 상대 코드로 넘겨 입력한 몫(만원). 법인시책 계산에서 김태연 진행 월초 전체가 빠지도록 여기에 적습니다.">법인시책 제외 보정<br><span style="font-size:0.72rem;color:var(--text-mute);font-weight:400;">김태연 진행분 중 다른 코드로 넘긴 월초</span></td><td></td>${prods.map(p => `<td class="num"><input class="w-num" data-k="cadj" data-prod="${p.id}" value="${(S.corpAdj && S.corpAdj[p.id]) || 0}" step="1"></td>`).join('')}</tr>`);
+    }
+
+    function renderResults() {
+      const r = HW.compute();
+      updateContractCalc(r);
+      r.products.forEach(p => { const el = document.getElementById('sumw_' + p.id); if (el) el.textContent = fmt(r.sumW[p.id]); });
+      r.ppl.forEach(p => { const el = document.getElementById('tv_' + p.id); if (el) el.textContent = p.table; });
+
+      const sellers = r.ppl.filter(p => p.sales);
+      let tIk=0, tHu=0, tSi=0, tOwn=0;
+      document.getElementById('resBody').innerHTML = sellers.map(p => {
+        tIk+=p.ikSoo; tHu+=p.huSoo; tSi+=p.sichaek; tOwn+=p.own;
+        return `<tr><td class="lbl">${esc(p.name)}</td><td class="num">${p.table}</td>
+          <td class="num">${fmt(p.ikSoo)}</td><td class="num">${fmt(p.huSoo)}</td>
+          <td class="num">${fmt(p.sichaek)}</td><td class="num"><b>${fmt(p.own)}</b></td></tr>`;
+      }).join('') +
+        `<tr class="total-row"><td>합계</td><td></td><td class="num">${fmt(tIk)}</td><td class="num">${fmt(tHu)}</td><td class="num">${fmt(tSi)}</td><td class="num">${fmt(tOwn)}</td></tr>`;
+
+      const corp20 = r.share ? r.corpTotal / (r.share/100) * (1 - r.share/100) : 0;
+      let ov = '';
+      r.ppl.filter(p => p.leader && p.part && p.ov > 0).forEach(p => { ov += `<div class="ov-item"><div class="t">${esc(p.name)} ${esc(p.part)}장 오버라이딩 (${p.table}테이블)</div><div class="v">${fmt(p.ov)}<small> 만원</small></div><div class="d">${esc(p.part)} 사원 월초 × (${p.table}−사원테이블)%</div></div>`; });
+      if (r.jijeom) ov += `<div class="ov-item"><div class="t">${esc(r.jijeom.name)} 팀장 오버라이딩 (${r.chamiTable}테이블)</div><div class="v">${fmt(r.chamiOv)}<small> 만원</small></div><div class="d">파트장·직할 아래 월초 × (${r.chamiTable}−파트장/사원테이블)%</div></div>`;
+      ov += `<div class="ov-item"><div class="t">지사장 오버라이딩</div><div class="v">${fmt(r.bossOv)}<small> 만원</small></div><div class="d">하위 월초 × (${r.bossTable}−${r.chamiTable})%</div></div>`;
+      ov += `<div class="ov-item"><div class="t">법인시책 — 지사장 수령 (${fmt(r.share)}%)</div><div class="v">${fmt(r.corpTotal)}<small> 만원</small></div><div class="d">익월 ${fmt(r.corpIk)} + 2차년도 ${fmt(r.corp13)} · 회사분 ${fmt(corp20)} (${fmt(100 - r.share)}%) 제외</div></div>`;
+      if (r.corpExTotal > 0) ov += `<div class="ov-item" style="opacity:0.75;"><div class="t">${esc(r.corpExNames.join('·'))} 파트 법인시책 — 지사장 미수령</div><div class="v">${fmt(r.corpExTotal)}<small> 만원</small></div><div class="d">익월 ${fmt(r.corpExIk)} + 2차년도 ${fmt(r.corpEx13)} · 총수령 합계에서 제외됨</div></div>`;
+      document.getElementById('ovCard').innerHTML = ov;
+
+      const b = r.boss;
+      document.getElementById('bossCards').innerHTML = b ? `
+        <div class="stat"><div class="label">본인 영업수수료</div><div class="value">${fmt(b.ikSoo + b.huSoo)}<small> 만원</small></div></div>
+        <div class="stat"><div class="label">본인 개인시책</div><div class="value">${fmt(b.sichaek)}<small> 만원</small></div></div>
+        <div class="stat"><div class="label">오버라이딩</div><div class="value">${fmt(r.bossOv)}<small> 만원</small></div></div>
+        <div class="stat"><div class="label">법인시책 (${fmt(r.share)}%)</div><div class="value">${fmt(r.corpTotal)}<small> 만원</small></div>${r.corpExTotal > 0 ? `<div class="delta muted">${esc(r.corpExNames.join('·'))} 파트분 ${fmt(r.corpExTotal)}만 미수령·제외</div>` : ''}</div>
+        <div class="stat" style="border:1.5px solid var(--brand);"><div class="label" style="color:var(--brand-dk); font-weight:700;">📅 익월 수령</div><div class="value" style="color:var(--brand-dk);">${fmt(b.ikRecv)}<small> 만원</small></div><div class="delta muted">다음달 지급분</div></div>
+        <div class="stat"><div class="label">후속·2차년도 수령</div><div class="value">${fmt(b.laterRecv)}<small> 만원</small></div><div class="delta muted">이후 지급분</div></div>
+        <div class="stat" style="border:2px solid var(--brand); background:var(--brand-sft);"><div class="label" style="color:var(--brand-dk); font-weight:700;">총수령</div><div class="value" style="color:var(--brand-dk);">${fmt(r.bossTotal)}<small> 만원</small></div></div>` : '';
+    }
+
+
+    // ===== 계약 건별 입력 (2026-10-01) =====
+    const wonFmt = v => (v || v === 0) ? Math.round(v).toLocaleString('ko-KR') : '-';
+    const pOpt = sel => '<option value="">—</option>' + S.people.map(p => `<option value="${p.id}"${p.id === sel ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+    const prOpt = sel => '<option value="">— 상품 —</option>' + S.products.map(p => `<option value="${p.id}"${p.id === sel ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+    function renderContracts() {
+      const cs = S.contracts || [];
+      document.getElementById('ctBody').innerHTML = cs.length ? cs.map(c => {
+        const s0 = (c.share || [])[0] || {}, s1 = (c.share || [])[1] || {};
+        const warn = (c.flags && c.flags.length) ? `<span title="${esc(c.flags.join(' / '))}" style="cursor:help;">⚠</span> ` : '';
+        return `<tr data-cid="${c.id}" class="${c.flags && c.flags.length ? 'ct-flag' : ''}">
+          <td style="white-space:nowrap;">${warn}<input type="text" data-k="cf" data-cid="${c.id}" data-f="ho" value="${esc(c.ho == null ? '' : c.ho)}" style="width:44px;min-width:44px;text-align:center;"></td>
+          <td><select data-k="cf" data-cid="${c.id}" data-f="emp">${pOpt(c.emp)}</select></td>
+          <td><select data-k="cf" data-cid="${c.id}" data-f="prod">${prOpt(c.prod)}</select></td>
+          <td><input class="ct-w" data-k="cf" data-cid="${c.id}" data-f="w" value="${c.w || 0}" step="0.01"></td>
+          <td class="calc dim" id="ctalloc_${c.id}" style="text-align:left;font-size:0.8rem;">-</td>
+          <td><input type="text" data-k="cf" data-cid="${c.id}" data-f="tag" value="${esc(c.tag || '')}" style="min-width:120px;"></td>
+          <td><div class="ct-sh"><select data-k="cf" data-cid="${c.id}" data-f="s0to">${pOpt(s0.to)}</select><input class="ct-pct" data-k="cf" data-cid="${c.id}" data-f="s0pct" value="${s0.pct == null ? '' : s0.pct}" placeholder="50">%</div></td>
+          <td><div class="ct-sh"><select data-k="cf" data-cid="${c.id}" data-f="s1to">${pOpt(s1.to)}</select><input class="ct-pct" data-k="cf" data-cid="${c.id}" data-f="s1pct" value="${s1.pct == null ? '' : s1.pct}" placeholder="25">%</div></td>
+          <td class="calc" id="ctnet_${c.id}">-</td><td class="calc dim" id="ctsh_${c.id}">-</td><td class="calc" id="ctlat_${c.id}">-</td><td class="calc" id="cttot_${c.id}">-</td>
+          <td><button class="del-btn" data-act="delcontract" data-cid="${c.id}" title="이 계약 삭제">🗑</button></td></tr>`;
+      }).join('') : `<tr><td colspan="13" style="text-align:center; color:var(--text-mute); padding:28px;">아직 건별 입력이 없습니다. <b>➕ 계약 한 건 추가</b>를 누르거나 <b>📥 카톡 내보내기(txt)</b>를 불러오세요. (건이 하나도 없으면 아래 월초 입력표 방식으로 계산됩니다)</td></tr>`;
+    }
+    function updateContractCalc(r) {
+      const cs = S.contracts || [];
+      if (r.contractsMode) {
+        cs.forEach((c, i) => {
+          const x = r.contractRows[i]; if (!x) return;
+          const a = document.getElementById('ctnet_' + c.id), b = document.getElementById('ctsh_' + c.id);
+          if (a) a.innerHTML = x.ok ? wonFmt(x.pre) + '원<br><span class="ct-sub">세후 ' + wonFmt(x.net) + '원</span>' : '입력 확인';
+          if (b) b.innerHTML = x.ok ? (x.preOut ? wonFmt(x.preOut) + '원 → ' + esc(x.preLines.map(l => l.name).join('·')) + '<br><span class="ct-sub">세후 ' + wonFmt(x.out) + '원</span>' : '—') : '';
+          const la = document.getElementById('ctlat_' + c.id), tt = document.getElementById('cttot_' + c.id);
+          if (la) la.textContent = x.ok ? wonFmt(x.later) + '원' : '';
+          if (tt) tt.textContent = x.ok ? wonFmt(x.total) + '원' : '';
+        });
+      }
+      const nm = id => ((S.people.find(p => p.id === id) || {}).name || '?');
+      const f2 = v => (Math.round(v * 100) / 100).toString();
+      cs.forEach(c => { const el = document.getElementById('ctalloc_' + c.id); if (el) el.textContent = c.emp ? HW.contractAlloc(c).filter(a => a.w > 0).map(a => nm(a.to) + ' ' + f2(a.w)).join(' · ') : '-'; });
+      const flagged = cs.filter(c => (c.flags && c.flags.length) || !c.emp || !c.prod).length;
+      const sumW = cs.reduce((s, c) => s + (+c.w || 0), 0);
+      const shareN = cs.filter(c => (c.share || []).some(s => s.to && +s.pct > 0)).length;
+      document.getElementById('ctChips').innerHTML = cs.length
+        ? `<span class="chip">계약 ${cs.length}건</span><span class="chip">월초 합 ${fmt(sumW)}만원</span><span class="chip">쉐어 건 ${shareN}건</span>` + (flagged ? `<span class="chip warn">확인 필요 ${flagged}건 (노란 줄)</span>` : `<span class="chip ok">확인 필요 0건</span>`)
+        : '';
+      document.getElementById('settlePanel').style.display = r.contractsMode ? '' : 'none';
+      renderTimeline();
+      if (r.contractsMode) {
+        const rows = r.ppl.filter(p => p.settle && (Math.abs(p.settle.pre) + Math.abs(p.settle.out) + Math.abs(p.settle.inn)) > 0.0001).sort((a, b) => b.settle.real - a.settle.real);
+        const T = k => rows.reduce((s, p) => s + p.settle[k], 0);
+        const v = x => (Math.abs(x) < 0.00005 ? '-' : fmt(x));
+        const payYm = HW.addMonths(HW.monthKey(), 1), TLC = window.__TLC || {};
+        const lat = p => { const rr = (TLC[p.name] || {})[payYm]; return rr ? rr.lreal / 10000 : 0; };
+        document.getElementById('settleBody').innerHTML = rows.map(p => { const s = p.settle; return `<tr><td class="lbl">${esc(p.name)}</td><td>${esc(HW.roleText(p))}</td><td class="num">${v(s.own)}</td><td class="num">${v(s.ov)}</td><td class="num">${v(s.corp)}</td><td class="num">${v(s.pre)}</td><td class="num">${s.tax ? '−' + fmt(s.tax) : '-'}</td><td class="num">${s.out ? '−' + fmt(s.out) : '-'}</td><td class="num">${s.inn ? '+' + fmt(s.inn) : '-'}</td><td class="num"><b>${fmt(s.real)}</b></td><td class="num">${lat(p) ? '+' + fmt(lat(p)) : '-'}</td><td class="num"><b>${fmt(s.real + lat(p))}</b></td></tr>`; }).join('')
+          + `<tr class="total-row"><td colspan="2">합계</td><td class="num">${fmt(T('own'))}</td><td class="num">${fmt(T('ov'))}</td><td class="num">${fmt(T('corp'))}</td><td class="num">${fmt(T('pre'))}</td><td class="num">−${fmt(T('tax'))}</td><td class="num">−${fmt(T('out'))}</td><td class="num">+${fmt(T('inn'))}</td><td class="num"><b>${fmt(T('real'))}</b></td><td class="num">+${fmt(rows.reduce((s, p) => s + lat(p), 0))}</td><td class="num"><b>${fmt(T('real') + rows.reduce((s, p) => s + lat(p), 0))}</b></td></tr>`;
+      }
+    }
+    let SNAPS = [];
+    async function loadSnaps() {
+      try {
+        const { data } = await SB.from('app_config').select('key,value').like('key', 'snap_%');
+        SNAPS = (data || []).filter(r => r.value && Array.isArray(r.value.contracts) && r.value.contracts.length && r.key.slice(5) < HW.monthKey())
+          .map(r => ({ ym: r.key.slice(5), products: r.value.products, people: r.value.people, contracts: r.value.contracts, share: r.value.share, bossShareTable: r.value.bossShareTable }));
+      } catch (e) {}
+    }
+    function renderTimeline() {
+      const panel = document.getElementById('timelinePanel');
+      const live = (S.contracts || []).length ? [{ ym: HW.monthKey(), products: S.products, people: S.people, contracts: S.contracts, share: S.share, bossShareTable: S.bossShareTable }] : [];
+      const sets = SNAPS.concat(live);
+      if (!sets.length) { panel.style.display = 'none'; return; }
+      panel.style.display = '';
+      const tl = HW.timeline(sets); window.__TLC = tl;
+      const sel = document.getElementById('tlWho'), keep = sel.value;
+      const names = Object.keys(tl).sort((a, b) => (a === '지점장' ? -1 : b === '지점장' ? 1 : a < b ? -1 : 1));
+      sel.innerHTML = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+      sel.value = names.includes(keep) ? keep : (names.includes('지점장') ? '지점장' : names[0]);
+      document.getElementById('tlBody').innerHTML = HW.timelineHtml(tl, sel.value, HW.monthKey());
+      document.getElementById('tlLater').innerHTML = HW.laterHtml(tl, sel.value, HW.monthKey());
+    }
+    document.addEventListener('change', e => { if (e.target && e.target.id === 'tlWho') { const sets = SNAPS.concat((S.contracts || []).length ? [{ ym: HW.monthKey(), products: S.products, people: S.people, contracts: S.contracts, share: S.share, bossShareTable: S.bossShareTable }] : []); const tl2 = HW.timeline(sets); document.getElementById('tlBody').innerHTML = HW.timelineHtml(tl2, e.target.value, HW.monthKey()); document.getElementById('tlLater').innerHTML = HW.laterHtml(tl2, e.target.value, HW.monthKey()); } });
+    function newContract() { return { id: 'c' + Date.now() + Math.floor(Math.random() * 1000), ho: (S.contracts || []).length + 1, emp: '', prod: '', w: 0, tag: '', share: [], flags: [] }; }
+    function setContractField(c, f, v) {
+      if (f === 'w') c.w = gnum(v);
+      else if (f === 'ho') c.ho = v;
+      else if (f === 'tag') c[f] = v;
+      else if (f === 'emp' || f === 'prod') { c[f] = v; if (c.flags) c.flags = c.flags.filter(x => !(f === 'emp' && /계약진행사원/.test(x)) && !(f === 'prod' && /상품/.test(x))); }
+      else {
+        const i = f.startsWith('s1') ? 1 : 0; c.share = c.share || [];
+        while (c.share.length <= i) c.share.push({ to: '', pct: '' });
+        if (f.endsWith('to')) { c.share[i].to = v; if (v && (c.share[i].pct === '' || c.share[i].pct == null)) c.share[i].pct = i === 0 ? 50 : 25; }
+        else c.share[i].pct = v === '' ? '' : gnum(v);
+        c.share = c.share.filter(s => s.to);
+        if (f.endsWith('to')) { renderContracts(); }
+      }
+    }
+
+    function renderAll() { renderRate(); renderPeople(); renderContracts(); renderWolcho(); renderResults(); }
+
+    function onInput(e) {
+      const k = e.target.dataset.k;
+      if (!k) return;
+      const v = e.target.value;
+      if (k === 'pname') { const p = S.products.find(x => x.id === e.target.dataset.prod); if (p) { p.name = v; const th = document.getElementById('wth_' + p.id); if (th) th.textContent = v; } }
+      else if (k === 'psched') { const p = S.products.find(x => x.id === e.target.dataset.prod); if (p) { if (v) p.sched = v; else delete p.sched; HW.save(); renderResults(); return; } }
+      else if (k === 'prate') { const p = S.products.find(x => x.id === e.target.dataset.prod); if (p) p[e.target.dataset.f] = gnum(v); }
+      else if (k === 'share') { S.share = gnum(v); }
+      else if (k === 'pn') { const p = S.people.find(x => x.id === e.target.dataset.per); if (p) { p.name = v; const c = document.getElementById('pn_' + p.id); if (c) c.textContent = v; } }
+      else if (k === 'cf') { const c = (S.contracts || []).find(x => x.id === e.target.dataset.cid); if (c) { setContractField(c, e.target.dataset.f, v); if (/^(emp|prod|w|s[01]to|s[01]pct)$/.test(e.target.dataset.f)) { HW.save(); renderWolcho(); renderResults(); return; } } }
+      else if (k === 'cadj') { if (!S.corpAdj) S.corpAdj = {}; S.corpAdj[e.target.dataset.prod] = gnum(v); }
+      else if (k === 'ppart') { const p = S.people.find(x => x.id === e.target.dataset.per); if (p) { p.part = v; if (!v) p.leader = false; HW.save(); renderAll(); return; } }
+      else if (k === 'pleader') { const p = S.people.find(x => x.id === e.target.dataset.per); if (p) { if (e.target.checked) S.people.forEach(q => { if (q.part === p.part) q.leader = false; }); p.leader = e.target.checked; HW.save(); renderAll(); return; } }
+      else if (k === 'pnocorp') { const p = S.people.find(x => x.id === e.target.dataset.per); if (p) p.noCorp = e.target.checked; }
+      else if (k === 'ptable') { const p = S.people.find(x => x.id === e.target.dataset.per); if (p) { p.table = gnum(v); const c = document.getElementById('tv_' + p.id); if (c) c.textContent = p.table; } }
+      else if (k === 'prole') { const p = S.people.find(x => x.id === e.target.dataset.per); if (p) { p.role = v; const opts = HW.TABLE_OPTS[v]; if (!opts.includes(p.table)) p.table = opts[0]; HW.save(); renderAll(); return; } }
+      else if (k === 'w') { S.wolcho[e.target.dataset.per][e.target.dataset.prod] = gnum(v); }
+      HW.save();
+      renderResults();
+    }
+    document.addEventListener('input', onInput);
+    document.addEventListener('change', onInput);
+
+    // ===== 끌어서 순서 변경 (상품·팀원 공용) =====
+    // 손잡이(⠿)를 누른 행만 draggable — 이름/숫자 칸 편집과 충돌 방지. 순서만 바뀌고 값·월초는 그대로.
+    function makeSortable(tbodyId, getArr, setArr) {
+      const body = document.getElementById(tbodyId);
+      let dragId = null, drop = null;
+      const clearMarks = () => body.querySelectorAll('.drop-before,.drop-after').forEach(el => el.classList.remove('drop-before', 'drop-after'));
+      body.addEventListener('mousedown', e => {
+        const tr = e.target.closest('tr[data-id]');
+        if (e.target.closest('.drag') && tr) tr.setAttribute('draggable', 'true');
+      });
+      body.addEventListener('dragstart', e => {
+        const tr = e.target.closest('tr[data-id]');
+        if (!tr || tr.getAttribute('draggable') !== 'true') { e.preventDefault(); return; }
+        dragId = tr.dataset.id; drop = null;
+        tr.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', dragId); } catch (_) {}
+      });
+      body.addEventListener('dragover', e => {
+        if (!dragId) return;
+        e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+        clearMarks();
+        const over = e.target.closest('tr[data-id]');
+        if (!over || over.dataset.id === dragId) { drop = null; return; }
+        const r = over.getBoundingClientRect();
+        const after = (e.clientY - r.top) > r.height / 2;
+        over.classList.add(after ? 'drop-after' : 'drop-before');
+        drop = { id: over.dataset.id, after };
+      });
+      body.addEventListener('drop', e => {
+        if (!dragId || !drop) return;
+        e.preventDefault();
+        const arr = getArr().slice();
+        const from = arr.findIndex(x => x.id === dragId);
+        if (from < 0) { dragId = null; return; }
+        const [item] = arr.splice(from, 1);
+        let at = arr.findIndex(x => x.id === drop.id);
+        if (at < 0) { dragId = null; return; }
+        if (drop.after) at += 1;
+        arr.splice(at, 0, item);
+        // 안전장치: 개수·구성이 그대로일 때만 반영
+        if (arr.length !== getArr().length || new Set(arr.map(x => x.id)).size !== arr.length) { dragId = null; return; }
+        setArr(arr);
+        dragId = null; drop = null;
+        HW.save(); renderAll();
+      });
+      body.addEventListener('dragend', () => {
+        const d = body.querySelector('tr.dragging'); if (d) { d.removeAttribute('draggable'); d.classList.remove('dragging'); }
+        clearMarks(); dragId = null; drop = null;
+      });
+    }
+    makeSortable('rateBody', () => S.products, a => { S.products = a; });
+    makeSortable('pplBody',  () => S.people,   a => { S.people = a; });
+
+    document.addEventListener('click', async e => {
+      if (e.target.closest('#addProduct')) {
+        const id = 'pr' + Date.now();
+        S.products.push({ id, name: '새 상품', ik:0, hu:0, siIk:0, si13:0, coIk:0, co13:0 });
+        S.people.forEach(per => { if (!S.wolcho[per.id]) S.wolcho[per.id] = {}; S.wolcho[per.id][id] = 0; });
+        HW.save(); renderAll();
+      } else if (e.target.closest('#zeroWolchoBtn')) {
+        // 월초 숫자만 0으로. 상품·팀원·요율·시책 설정은 그대로.
+        if (!confirm('월초 입력표의 모든 숫자를 0으로 바꿉니다.' + String.fromCharCode(10) + '(상품·팀원·요율·시책 설정은 그대로입니다. 되돌릴 수 없습니다.)' + String.fromCharCode(10) + String.fromCharCode(10) + '진행할까요?')) return;
+        S.people.forEach(per => { S.wolcho[per.id] = {}; S.products.forEach(pr => { S.wolcho[per.id][pr.id] = 0; }); });
+        S.corpAdj = {};
+        HW.save(); renderAll();
+      } else if (e.target.closest('#ctAdd')) {
+        S.contracts = S.contracts || []; S.contracts.push(newContract()); HW.save(); renderAll();
+      } else if (e.target.closest('#ctClear')) {
+        if (!(S.contracts || []).length) return;
+        if (!confirm('건별 입력 ' + S.contracts.length + '건을 전부 지웁니다.' + NL + '(월초 입력표 방식으로 돌아갑니다. 되돌릴 수 없습니다.)' + NL + NL + '진행할까요?')) return;
+        S.contracts = []; HW.save(); renderAll();
+      } else if (e.target.closest('[data-act="delcontract"]')) {
+        const id = e.target.closest('[data-act="delcontract"]').dataset.cid;
+        S.contracts = (S.contracts || []).filter(x => x.id !== id); HW.save(); renderAll();
+      } else if (e.target.closest('#ctDoImport')) {
+        doImport();
+      } else if (e.target.closest('#addPerson')) {
+        const id = 'pe' + Date.now();
+        S.people.push({ id, name:'새 팀원', role:'fc', table:75, sales:true });
+        S.wolcho[id] = {}; S.products.forEach(pr => S.wolcho[id][pr.id] = 0);
+        HW.save(); renderAll();
+      } else if (e.target.closest('[data-act="delprod"]')) {
+        if (S.products.length <= 1) { alert('상품은 최소 1개는 있어야 합니다.'); return; }
+        const id = e.target.closest('[data-act="delprod"]').dataset.prod;
+        S.products = S.products.filter(p => p.id !== id);
+        S.people.forEach(per => { if (S.wolcho[per.id]) delete S.wolcho[per.id][id]; });
+        HW.save(); renderAll();
+      } else if (e.target.closest('[data-act="delperson"]')) {
+        const id = e.target.closest('[data-act="delperson"]').dataset.per;
+        const p = S.people.find(x => x.id === id);
+        if (p && p.role === 'boss') { alert('지사장은 삭제할 수 없습니다.'); return; }
+        if (confirm((p ? p.name : '') + ' 팀원을 삭제할까요?')) {
+          S.people = S.people.filter(x => x.id !== id);
+          delete S.wolcho[id];
+          HW.save(); renderAll();
+        }
+      } else if (e.target.closest('#resetBtn')) {
+        if (confirm('기준값·상품·팀원·입력을 모두 기본값으로 되돌릴까요?')) { if (typeof SB !== 'undefined') await SB.from('app_config').delete().eq('key', 'commission'); location.reload(); }
+      } else if (e.target.closest('#migrateBtn')) {
+        await migrateToNewScheme();
+      } else if (e.target.closest('#addCardifBtn')) {
+        await addCardifPension();
+      } else if (e.target.closest('#ibk460Btn')) {
+        await applyIbk460();
+      }
+    });
+
+    // ===== 2026-07 손보 수수료체계 이관 (기준 문서: 손보수수료체계_2026-07.md) =====
+    // 옛 상품 → 새 상품 매핑 (id 기준 + 이름 기준 이중 안전망)
+    const MIG_ID = { hanwha:'inHanwha', ibk:'ibk', mirae:'mirae', linaT5:'linaT5', linaT10:'linaT10' };
+    const MIG_NAME = {
+      '한화손보여성건강':'inHanwha', 'KB손해보험':'inKB', 'DB건강보험':'inDB', 'DB운전자':'drvDB',
+      '메리츠운전자':'drvMeritz', 'IBK변액연금':'ibk', '미래에셋M-케어':'mirae',
+      '라이나생명치아5년납':'linaT5', '라이나생명치아10년납':'linaT10',
+    };
+    function migNeeded() { return !S.products.some(p => p.id === 'inHanwha'); }
+    async function migrateToNewScheme() {
+      const norm = s => String(s || '').replace(/\s+/g, '');
+      const news = HW.defaultProducts();
+      const mapTo = {}, oldTotal = {};
+      S.products.forEach(p => {
+        mapTo[p.id] = MIG_ID[p.id] || MIG_NAME[norm(p.name)] || null;
+        oldTotal[p.id] = S.people.reduce((s, per) => s + (+(S.wolcho[per.id] && S.wolcho[per.id][p.id]) || 0), 0);
+      });
+      // 매핑이 없는데 월초가 남아 있는 옛 상품은 삭제하지 않고 목록 뒤에 그대로 보존
+      S.products.forEach(p => { if (!mapTo[p.id] && oldTotal[p.id] > 0) news.push(p); });
+      const newW = {};
+      S.people.forEach(per => {
+        newW[per.id] = {};
+        news.forEach(pr => newW[per.id][pr.id] = 0);
+        S.products.forEach(p => {
+          const v = +(S.wolcho[per.id] && S.wolcho[per.id][p.id]) || 0;
+          if (!v) return;
+          const nid = mapTo[p.id] || p.id;
+          newW[per.id][nid] = (newW[per.id][nid] || 0) + v;
+        });
+      });
+      // 검증: 월초 총합이 이관 전후 일치해야만 진행
+      const before = S.people.reduce((s, per) => s + S.products.reduce((a, p) => a + (+(S.wolcho[per.id] && S.wolcho[per.id][p.id]) || 0), 0), 0);
+      const after = S.people.reduce((s, per) => s + Object.values(newW[per.id]).reduce((a, b) => a + (+b || 0), 0), 0);
+      if (Math.abs(before - after) > 0.001) { alert('이관 검증 실패 (월초 합계 ' + before + ' → ' + after + ' 불일치) — 적용을 중단했습니다. 아무것도 바뀌지 않았습니다.'); return; }
+      const moved = S.products.filter(p => oldTotal[p.id] > 0).map(p => {
+        const dest = mapTo[p.id] ? ((news.find(n => n.id === mapTo[p.id]) || { name: mapTo[p.id] }).name) : '(그대로 유지)';
+        return '· ' + p.name + ' → ' + dest + ' : ' + oldTotal[p.id] + '만';
+      }).join('\n');
+      if (!confirm('2026-07 새 손보 수수료체계(상품 ' + news.length + '개)로 교체합니다.\n요율·시책은 새 값으로 바뀌고, 이번 달 월초는 아래처럼 이관됩니다.\n\n' + (moved || '· 이관할 월초 입력 없음') + '\n\n월초 합계 검증: ' + before + '만 → ' + after + '만 (일치)\n진행할까요?')) return;
+      S.products = news; S.wolcho = newW;
+      await HW.save();
+      // 서버에 실제로 저장됐는지 다시 읽어서 확인 (권한 없으면 조용히 실패하므로)
+      let ok = false;
+      try {
+        const { data } = await SB.from('app_config').select('value').eq('key', 'commission').maybeSingle();
+        ok = !!(data && data.value && Array.isArray(data.value.products) && data.value.products.some(p => p.id === 'inHanwha'));
+      } catch (e) {}
+      if (!ok) { alert('⚠ 서버 저장이 확인되지 않았습니다 (권한 문제일 수 있음). 관리자 계정으로 로그인했는지 확인 후 다시 눌러주세요.'); await HW.load(); renderAll(); return; }
+      renderAll();
+      document.getElementById('migrateBtn').style.display = 'none';
+      alert('✅ 새 체계 적용 완료. 전 직원 화면에 자동 반영됩니다 (열려 있던 화면은 새로고침 필요).');
+    }
+
+    // ===== 카디프생명 연금(적립형 10년납) 한 번에 추가 (2026-09-16) =====
+    // 기존 상품·팀원·월초는 그대로 두고 맨 뒤에 한 줄만 붙인다.
+    const NL = String.fromCharCode(10);
+    const CARDIF = { id:'cardifPen', name:'카디프생명 연금(적립형 10년납)', ik:424.8, hu:235.2, siIk:60, si13:0, coIk:10, co13:0 };
+    function cardifNeeded() { return !S.products.some(p => p.id === CARDIF.id); }
+    async function addCardifPension() {
+      if (!cardifNeeded()) { alert('이미 들어 있습니다.'); return; }
+      var msg = '상품 목록 맨 뒤에 아래 한 줄을 추가합니다. 기존 상품·팀원·월초 입력은 그대로 유지됩니다.' + NL + NL
+        + '· ' + CARDIF.name + NL
+        + '· 수수료(회사100%) 익월 424.8% / 후속 235.2% (2차년도 117.6 + 3차년도 117.6)' + NL
+        + '· 개인시책 익월 60% / 2차년도 0%' + NL
+        + '· 법인시책 익월 10% / 2차년도 0%' + NL + NL
+        + '추가할까요?';
+      if (!confirm(msg)) return;
+      const before = S.people.reduce((s, per) => s + S.products.reduce((a, p) => a + (+(S.wolcho[per.id] && S.wolcho[per.id][p.id]) || 0), 0), 0);
+      S.products.push(Object.assign({}, CARDIF));
+      S.people.forEach(per => { if (!S.wolcho[per.id]) S.wolcho[per.id] = {}; S.wolcho[per.id][CARDIF.id] = 0; });
+      const after = S.people.reduce((s, per) => s + S.products.reduce((a, p) => a + (+(S.wolcho[per.id] && S.wolcho[per.id][p.id]) || 0), 0), 0);
+      if (Math.abs(before - after) > 0.001) { alert('검증 실패 (월초 합계 ' + before + ' → ' + after + ' 불일치) — 중단했습니다.'); await HW.load(); renderAll(); return; }
+      await HW.save();
+      let ok = false;
+      try {
+        const { data } = await SB.from('app_config').select('value').eq('key', 'commission').maybeSingle();
+        ok = !!(data && data.value && Array.isArray(data.value.products) && data.value.products.some(p => p.id === CARDIF.id));
+      } catch (e) {}
+      if (!ok) { alert('⚠ 서버 저장이 확인되지 않았습니다 (권한 문제일 수 있음). 지사장 계정으로 로그인했는지 확인 후 다시 눌러주세요.'); await HW.load(); renderAll(); return; }
+      renderAll();
+      document.getElementById('addCardifBtn').style.display = 'none';
+      alert('✅ 카디프생명 연금 추가 완료. 월초 합계 ' + before + '만 → ' + after + '만 (그대로). 전 직원 화면에 반영됩니다.');
+    }
+
+    // ===== IBK 변액연금 익월 470 → 460 한 번에 고치기 (2026-09-23 대표님 지시) =====
+    // 근거: 오렌지터치 수수료명세(지급년월 202609, (생보)FP수수료) 75테이블 50만→1,725,000 = 345% = 460%×75%.
+    // 저장값(app_config.commission)에 470이 남아 있으면 버튼이 보이고, 누르면 요율 한 칸만 460으로 바꾼다. 월초·다른 상품은 그대로.
+    function ibk460Needed() { const p = S.products.find(x => x.id === 'ibk'); return !!(p && +p.ik === 470); }
+    async function applyIbk460() {
+      const p = S.products.find(x => x.id === 'ibk');
+      if (!p || +p.ik !== 470) { alert('이미 460% 입니다.'); return; }
+      if (!confirm('IBK 변액연금 익월 수수료율을 470% → 460% 로 바꿉니다.' + NL + '(전산 수수료명세 기준: 75테이블 월초 50만 = 1,725,000원 = 345%)' + NL + NL + '월초 입력·다른 상품·시책은 그대로입니다. 진행할까요?')) return;
+      p.ik = 460;
+      await HW.save();
+      let ok = false;
+      try {
+        const { data } = await SB.from('app_config').select('value').eq('key', 'commission').maybeSingle();
+        const q = data && data.value && Array.isArray(data.value.products) && data.value.products.find(x => x.id === 'ibk');
+        ok = !!(q && +q.ik === 460);
+      } catch (e) {}
+      if (!ok) { alert('⚠ 서버 저장이 확인되지 않았습니다 (권한 문제일 수 있음). 지사장 계정으로 로그인했는지 확인 후 다시 눌러주세요.'); await HW.load(); renderAll(); return; }
+      renderAll();
+      document.getElementById('ibk460Btn').style.display = 'none';
+      alert('✅ IBK 익월 460% 적용 완료. 전 직원 화면에 반영됩니다 (열려 있던 화면은 새로고침 필요).');
+    }
+
+
+    // ===== 카톡 내보내기 불러오기 =====
+    let IMPORT_ROWS = null;
+    document.getElementById('ctFile').addEventListener('change', async e => {
+      const f = e.target.files[0]; if (!f) return;
+      const txt = await f.text();
+      IMPORT_ROWS = HWImport.parseText(txt);
+      const ms = HWImport.months(IMPORT_ROWS);
+      if (!ms.length) { document.getElementById('ctImport').innerHTML = '<span class="chip warn">계약 게시글(「* N호」)을 찾지 못했습니다. 계약공유방 대화 내보내기 파일이 맞는지 확인해 주세요.</span>'; return; }
+      document.getElementById('ctImport').innerHTML = `<span class="ct-imp">파일에서 ${IMPORT_ROWS.length}건 발견 · 불러올 달 <select id="ctMonth">${ms.map((m, i) => `<option value="${m}"${i === ms.length - 1 ? ' selected' : ''}>${m.replace('-', '년 ')}월</option>`).join('')}</select> <button class="btn btn-ghost" id="ctDoImport" style="border-color:var(--brand); color:var(--brand-dk); font-weight:700;">이 달 불러오기</button><span id="ctImpMsg"></span></span>`;
+      e.target.value = '';
+    });
+    function doImport() {
+      if (!IMPORT_ROWS) return;
+      const ym = document.getElementById('ctMonth').value;
+      let cs = HWImport.toContracts(IMPORT_ROWS, ym, S.people, S.products);
+      if (!cs.length) { alert('그 달 계약이 없습니다.'); return; }
+      if ((S.contracts || []).length && !confirm('지금 건별 입력 ' + S.contracts.length + '건이 있습니다. ' + ym.replace('-', '년 ') + '월 ' + cs.length + '건으로 바꿉니다.' + NL + '진행할까요?')) return;
+      const need = [...new Set(cs.flatMap(c => c.flags.map(x => (x.match(/쉐어 상대 「(.+?)」/) || [])[1]).filter(Boolean)))];
+      if (need.length && confirm('쉐어 상대가 팀원 목록에 없습니다: ' + need.join(', ') + NL + '팀원으로 추가할까요? (테이블 65로 추가 — 쉐어로 받는 몫이 월초에도 보이게)')) {
+        need.forEach(n => { const id = 'pe' + Date.now() + Math.floor(Math.random() * 1000); S.people.push({ id, name: n, role: 'fc', table: 65, sales: true }); S.wolcho[id] = {}; S.products.forEach(pr => S.wolcho[id][pr.id] = 0); });
+        cs = HWImport.toContracts(IMPORT_ROWS, ym, S.people, S.products);
+      }
+      S.contracts = cs; HW.save(); renderAll();
+      const bad = cs.filter(c => c.flags.length || !c.emp || !c.prod).length;
+      const msgEl = document.getElementById('ctImpMsg') || document.getElementById('ctImport');
+      msgEl.innerHTML = `<span class="chip ok">${ym.replace('-', '년 ')}월 ${cs.length}건 불러옴</span>` + (bad ? `<span class="chip warn">확인 필요 ${bad}건 — 노란 줄의 ⚠ 위에 마우스를 올려 보세요</span>` : '');
+    }
+    document.getElementById('bossShareTbl').addEventListener('input', e => { S.bossShareTable = gnum(e.target.value); HW.save(); renderResults(); });
+
+    (async () => {
+      await HW.load(); await loadSnaps(); document.getElementById('share').value = S.share; document.getElementById('bossShareTbl').value = S.bossShareTable || 75; renderAll();
+      try {
+        const auth = JSON.parse(localStorage.getItem('hwAuth') || '{}');
+        const isBoss = (auth.role === 'boss' || auth.personId === 'hcw');
+        if (migNeeded() && isBoss) document.getElementById('migrateBtn').style.display = '';
+        if (cardifNeeded() && isBoss) document.getElementById('addCardifBtn').style.display = '';
+        if (ibk460Needed() && isBoss) document.getElementById('ibk460Btn').style.display = '';
+      } catch (e) {}
+    })();
+  </script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

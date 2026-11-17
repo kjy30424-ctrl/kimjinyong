@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>실적 보관함 · 지사 포털</title>
+  <script>
+    // 지사장 전용 — 내용 노출 전 차단
+    (function () {
+      var a = null;
+      try { a = JSON.parse(localStorage.getItem('hwAuth') || 'null'); } catch (e) {}
+      if (!a) { location.href = 'login.html'; }
+      else if (a.role !== 'boss' && a.personId !== 'hcw') { location.href = 'index.html'; }
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .tabs2 { display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap; }
+    .tabs2 button { padding:9px 16px; border:1px solid var(--line); background:var(--surface); border-radius:10px; cursor:pointer; font-family:inherit; font-size:0.9rem; font-weight:600; color:var(--text-soft); }
+    .tabs2 button.active { background:var(--brand); border-color:var(--brand); color:#fff; }
+    .tabsec { display:none; }
+    .tabsec.on { display:block; }
+    .ctrl-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+    .sel { padding:9px 12px; border:1.5px solid var(--line-2); border-radius:10px; font-size:0.92rem; font-family:inherit; }
+    .sel:focus { outline:none; border-color:var(--brand); }
+    .empty { color:var(--text-mute); font-size:0.9rem; padding:20px 4px; }
+    .ew-num { width:78px; text-align:right; padding:6px 8px; border:1.5px solid #f0d98a; background:#fff8db; color:#1d4ed8; font-weight:700; border-radius:8px; font-size:0.85rem; font-family:inherit; font-variant-numeric:tabular-nums; }
+    .ew-num:focus { outline:none; border-color:var(--brand); }
+    .lock-badge { font-size:0.72rem; background:var(--brand-sft); color:var(--brand-dk); border:1px solid #ffd9b8; border-radius:999px; padding:2px 8px; font-weight:700; margin-left:8px; }
+    .tbl td.num, .tbl th.num { font-variant-numeric: tabular-nums; }
+    .trend-tbl th:first-child, .trend-tbl td:first-child { position:sticky; left:0; background:var(--surface); text-align:left; font-weight:600; }
+  </style>
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="snapshots"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div>
+          <h1>실적 보관함</h1>
+          <div class="sub">매달 성적표 자동 보관 · 지사장 전용</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="tabs2">
+        <button data-tab="month" class="active">월별 성적표</button>
+        <button data-tab="trend">코치별 추이</button>
+        <button data-tab="prod">상품별 월초</button>
+        <button data-tab="graph">📈 성장 그래프</button>
+      </div>
+
+      <!-- 탭1: 월별 성적표 -->
+      <section class="tabsec on" id="sec-month">
+        <div class="ctrl-row">
+          <span style="font-weight:600;">달 선택</span>
+          <select class="sel" id="monthSel"></select>
+          <span id="lockBadge"></span>
+          <button class="btn btn-ghost" id="editBtn" style="margin-left:auto;">✏️ 이 달 숫자 수정</button>
+        </div>
+        <div class="stat-grid" id="m-summary"></div>
+        <div class="panel">
+          <div class="panel-head"><h2>코치별 상세</h2><span style="color:var(--text-mute);font-size:0.82rem;">순위는 총수수료 기준 · 단위 원</span></div>
+          <div class="panel-body" style="overflow-x:auto;">
+            <table class="tbl"><thead><tr><th style="width:48px">순위</th><th>코치</th><th class="num">월초성적</th><th class="num">총수수료</th><th class="num">익월수수료</th></tr></thead><tbody id="m-rows"></tbody></table>
+          </div>
+        </div>
+
+        <div class="panel" id="editPanel" style="display:none;">
+          <div class="panel-head"><h2>월초 수정</h2><span style="color:var(--text-mute);font-size:0.82rem;">상품별 월초(만원)를 고치면 성적·수수료가 자동 재계산되고, 이 달은 자동 변경에서 잠겨요</span></div>
+          <div class="panel-body" style="overflow-x:auto;">
+            <table class="tbl" id="editTbl"></table>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+              <button class="btn btn-ghost" id="editCancel">취소</button>
+              <button class="btn btn-brand" id="editSave">저장</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 탭2: 코치별 추이 -->
+      <section class="tabsec" id="sec-trend">
+        <div class="ctrl-row">
+          <span style="font-weight:600;">기준</span>
+          <select class="sel" id="metricSel">
+            <option value="hwan">월초성적</option>
+            <option value="own">총수수료</option>
+            <option value="ownIk">익월수수료</option>
+          </select>
+          <span style="color:var(--text-mute); font-size:0.82rem;">가로=월 / 세로=코치 · 단위 원</span>
+        </div>
+        <div class="panel">
+          <div class="panel-body" style="overflow-x:auto;">
+            <table class="tbl trend-tbl" id="trendTbl"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 탭3: 상품별 월초 -->
+      <section class="tabsec" id="sec-prod">
+        <div class="ctrl-row">
+          <span style="font-weight:600;">달</span>
+          <select class="sel" id="prodMonthSel"></select>
+          <span style="font-weight:600;">코치</span>
+          <select class="sel" id="prodPersonSel"></select>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2 id="prodTitle">상품별 월초</h2><span style="color:var(--text-mute);font-size:0.82rem;">단위 원</span></div>
+          <div class="panel-body" style="overflow-x:auto;">
+            <table class="tbl"><thead><tr><th>상품</th><th class="num">월초</th></tr></thead><tbody id="prodRows"></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 탭4: 성장 그래프 -->
+      <section class="tabsec" id="sec-graph">
+        <div class="ctrl-row">
+          <span style="font-weight:600;">기준</span>
+          <select class="sel" id="gMetricSel">
+            <option value="own">총 매출액</option>
+            <option value="hwan">월초성적</option>
+            <option value="ownIk">익월수수료</option>
+          </select>
+          <span style="color:var(--text-mute); font-size:0.82rem;">단위 원 · 우상향 성장 추이</span>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>📈 지사 전체 업적 추이</h2><span id="gBranchSub" style="color:var(--text-mute);font-size:0.82rem;"></span></div>
+          <div class="panel-body"><div style="position:relative; height:300px;"><canvas id="gBranchChart"></canvas></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>👤 개인 업적 추이</h2></div>
+          <div class="panel-body">
+            <div class="ctrl-row"><span style="font-weight:600;">코치</span><select class="sel" id="gPersonSel"></select></div>
+            <div style="position:relative; height:300px;"><canvas id="gPersonChart"></canvas></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script src="commission-core.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script>
+    const fmt = HW.fmt;
+    const won = v => fmt((v || 0) * 10000); // 만원 → 원 표시
+    const esc = s => String(s == null ? '' : s).replace(/</g, '&lt;');
+    const mlabel = m => { const [y, mo] = m.split('-'); return `${y}년 ${Number(mo)}월`; };
+    let monthData = [], snapByMonth = {};
+
+    function computeSnap(v) {
+      HW.state.products = v.products || [];
+      HW.state.people = v.people || [];
+      HW.state.wolcho = v.wolcho || {};
+      HW.state.corpAdj = v.corpAdj || {};
+      HW.state.contracts = v.contracts || [];
+      HW.state.bossShareTable = typeof v.bossShareTable === 'number' ? v.bossShareTable : 75;
+      HW.state.share = typeof v.share === 'number' ? v.share : 80;
+      return HW.compute();
+    }
+
+    async function init() {
+      // 1) 현재 달 자동 저장 (실시간 수수료 데이터 → 이번 달 성적표)
+      let live = null;
+      try { const { data } = await SB.from('app_config').select('value').eq('key', 'commission').maybeSingle(); live = data && data.value; } catch (e) {}
+      const cm = HW.monthKey();
+      if (live) {
+        let locked = false;
+        try { const { data } = await SB.from('app_config').select('value').eq('key', 'snap_' + cm).maybeSingle(); if (data && data.value && data.value.edited) locked = true; } catch (e) {}
+        if (!locked) {
+          try { await SB.from('app_config').upsert({ key: 'snap_' + cm, value: Object.assign({ month: cm, savedAt: new Date().toISOString() }, live), updated_at: new Date().toISOString() }); } catch (e) {}
+        }
+      }
+      // 2) 모든 달 성적표 불러오기
+      let rows = [];
+      try { const { data } = await SB.from('app_config').select('key,value').like('key', 'snap_%'); rows = (data || []).filter(r => r.key.indexOf('snap_') === 0 && r.value); } catch (e) {}
+      rows.sort((a, b) => a.key < b.key ? -1 : 1);
+      monthData = rows.map(r => {
+        const month = r.value.month || r.key.slice(5);
+        const cr = computeSnap(r.value);
+        const byId = {}; cr.ppl.forEach(p => byId[p.idx] = p);
+        return { month, value: r.value, r: cr, byId };
+      });
+      snapByMonth = {};
+      monthData.forEach(md => snapByMonth[md.month] = md);
+
+      if (!monthData.length) {
+        document.getElementById('m-summary').innerHTML = '';
+        document.querySelectorAll('.content .panel-body, #m-rows').forEach(() => {});
+        document.getElementById('m-rows').innerHTML = '<tr><td colspan="5" class="empty">아직 저장된 성적표가 없습니다. 수수료 계산기에서 월초를 입력하면 이번 달부터 자동 저장돼요.</td></tr>';
+        return;
+      }
+
+      // 옵션 채우기 (최근 달이 기본 = 마지막)
+      const opts = monthData.map(md => `<option value="${md.month}">${mlabel(md.month)}</option>`).join('');
+      const last = monthData[monthData.length - 1].month;
+      const ms = document.getElementById('monthSel'); ms.innerHTML = opts; ms.value = last;
+      const pms = document.getElementById('prodMonthSel'); pms.innerHTML = opts; pms.value = last;
+
+      renderMonth(last);
+      renderTrend();
+      fillPersonSel(last);
+      renderProd();
+      fillGraphPersonSel();
+    }
+
+    // ---- 탭1: 월별 성적표 ----
+    let curMonth = null;
+    function renderMonth(month) {
+      const md = snapByMonth[month]; if (!md) return;
+      curMonth = month;
+      const isCt = Array.isArray(md.value.contracts) && md.value.contracts.length > 0;
+      document.getElementById('lockBadge').innerHTML = (md.value.edited ? '<span class="lock-badge">🔒 수정함(보호됨)</span>' : '') + (isCt ? ' <span class="lock-badge" style="background:#e9f1ff;color:#1f3d7a;border-color:#c9dafc;">📋 계약 건별 입력으로 계산된 달</span>' : '');
+      document.getElementById('editBtn').style.display = isCt ? 'none' : (document.getElementById('editPanel').style.display === 'none' ? '' : 'none');
+      const r = md.r;
+      const sellers = r.ppl.filter(p => p.sales);
+      const branchHwan = sellers.reduce((s, p) => s + p.hwan, 0);
+      const branchOwn = sellers.reduce((s, p) => s + p.own, 0);
+      const branchOwnIk = sellers.reduce((s, p) => s + p.ownIk, 0);
+      const active = sellers.filter(p => p.hwan > 0).length;
+      const avg = sellers.length ? branchHwan / sellers.length : 0;
+      const fcs = r.ppl.filter(p => p.role === 'fc');
+      const topFC = fcs.slice().sort((a, b) => b.own - a.own)[0];
+      const crownIdx = (topFC && topFC.own > 0) ? topFC.idx : -1;
+      const crown = idx => idx === crownIdx ? ' 👑' : '';
+
+      document.getElementById('m-summary').innerHTML = `
+        <div class="stat"><div class="label">지사 월초성적</div><div class="value">${won(branchHwan)}<small> 원</small></div></div>
+        <div class="stat"><div class="label">가동 코치</div><div class="value">${active}<small> / ${sellers.length}명</small></div></div>
+        <div class="stat"><div class="label">인당 평균 월초성적</div><div class="value">${won(avg)}<small> 원</small></div></div>
+        <div class="stat" style="border:1.5px solid var(--brand);"><div class="label" style="color:var(--brand-dk); font-weight:700;">🏆 1등</div><div class="value">${topFC ? esc(topFC.name) : '-'}</div><div class="delta up">${topFC ? '총 ' + won(topFC.own) + '원' : ''}</div></div>`;
+
+      const ranked = sellers.filter(p => p.role !== 'boss').sort((a, b) => b.own - a.own);  // 지점장(본인) 개인 줄 숨김(합계엔 포함)
+      document.getElementById('m-rows').innerHTML = ranked.map((p, i) =>
+        `<tr><td><span class="rank${i < 3 ? ' top' : ''}">${i + 1}</span></td><td class="name">${esc(p.name)}${crown(p.idx)}</td>
+          <td class="num">${won(p.hwan)}원</td><td class="num">${won(p.own)}원</td><td class="num">${won(p.ownIk)}원</td></tr>`).join('') +
+        `<tr class="total-row"><td></td><td>지사 합계</td><td class="num">${won(branchHwan)}원</td><td class="num">${won(branchOwn)}원</td><td class="num">${won(branchOwnIk)}원</td></tr>`;
+    }
+
+    // ---- 탭2: 코치별 추이 ----
+    function renderTrend() {
+      const prop = document.getElementById('metricSel').value;
+      // 코치 union (id -> name), 그리고 전체 기간 합으로 정렬
+      const name = {}, total = {};
+      monthData.forEach(md => md.r.ppl.filter(p => p.sales && p.role !== 'boss').forEach(p => { name[p.idx] = p.name; total[p.idx] = (total[p.idx] || 0) + (p.hwan || 0); }));
+      const ids = Object.keys(name).sort((a, b) => (total[b] || 0) - (total[a] || 0));
+
+      const head = `<thead><tr><th>코치</th>${monthData.map(md => `<th class="num">${mlabel(md.month)}</th>`).join('')}</tr></thead>`;
+      const body = ids.map(id => {
+        const cells = monthData.map(md => {
+          const p = md.byId[id];
+          return `<td class="num">${(p && p.sales) ? won(p[prop]) : '-'}</td>`;
+        }).join('');
+        return `<tr><td>${esc(name[id])}</td>${cells}</tr>`;
+      }).join('');
+      const totalRow = `<tr class="total-row"><td>지사 합계</td>${monthData.map(md => {
+        const sum = md.r.ppl.filter(p => p.sales).reduce((s, p) => s + (p[prop] || 0), 0);
+        return `<td class="num">${won(sum)}</td>`;
+      }).join('')}</tr>`;
+      document.getElementById('trendTbl').innerHTML = head + '<tbody>' + body + totalRow + '</tbody>';
+    }
+
+    // ---- 탭3: 상품별 월초 ----
+    function fillPersonSel(month) {
+      const md = snapByMonth[month]; if (!md) return;
+      const people = (md.value.people || []).filter(p => p.sales !== false && p.role !== 'boss');  // 지점장(본인)은 선택 불가(숨김)
+      document.getElementById('prodPersonSel').innerHTML =
+        `<option value="__all">전체</option>` + people.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+    }
+    function renderProd() {
+      const month = document.getElementById('prodMonthSel').value;
+      const who = document.getElementById('prodPersonSel').value;
+      const md = snapByMonth[month]; if (!md) return;
+      const products = md.value.products || [];
+      const isCt = Array.isArray(md.value.contracts) && md.value.contracts.length > 0;
+      const wolcho = isCt ? (function () { const w = {}; md.value.contracts.forEach(c => { let used = 0; (c.share || []).forEach(s => { const pc = Math.max(0, +s.pct || 0); if (s.to && pc > 0) { (w[s.to] = w[s.to] || {})[c.prod] = ((w[s.to] || {})[c.prod] || 0) + (+c.w || 0) * pc / 100; used += pc; } }); (w[c.emp] = w[c.emp] || {})[c.prod] = ((w[c.emp] || {})[c.prod] || 0) + (+c.w || 0) * Math.max(0, 100 - Math.min(100, used)) / 100; }); return w; })() : (md.value.wolcho || {});
+      const people = md.value.people || [];
+
+      const whoName = who === '__all' ? '전체' : ((people.find(p => p.id === who) || {}).name || '');
+      document.getElementById('prodTitle').textContent = `상품별 월초 — ${mlabel(month)} · ${whoName}`;
+
+      let rows = products.map(pr => {
+        let amt = 0;
+        if (who === '__all') people.forEach(p => { amt += (wolcho[p.id] && wolcho[p.id][pr.id]) || 0; });
+        else amt = (wolcho[who] && wolcho[who][pr.id]) || 0;
+        return { name: pr.name, amt };
+      }).filter(x => x.amt > 0);
+
+      const sum = rows.reduce((s, x) => s + x.amt, 0);
+      document.getElementById('prodRows').innerHTML = rows.length
+        ? rows.map(x => `<tr><td>${esc(x.name)}</td><td class="num">${won(x.amt)}원</td></tr>`).join('') +
+          `<tr class="total-row"><td>합계</td><td class="num">${won(sum)}원</td></tr>`
+        : '<tr><td colspan="2" class="empty">이 달에 월초 입력 내역이 없습니다.</td></tr>';
+    }
+
+    // ---- 탭4: 성장 그래프 ----
+    const charts = {};
+    const METRIC_LABEL = { own: '총 매출액', hwan: '월초성적', ownIk: '익월수수료' };
+    const smonth = m => { const [y, mo] = m.split('-'); return `${y.slice(2)}.${Number(mo)}`; }; // 26.6
+
+    // 전체 기간에 등장한 코치 목록(총 월초성적 큰 순)
+    function personUnion() {
+      const name = {}, total = {};
+      monthData.forEach(md => md.r.ppl.filter(p => p.sales && p.role !== 'boss').forEach(p => { name[p.idx] = p.name; total[p.idx] = (total[p.idx] || 0) + (p.hwan || 0); }));
+      const ids = Object.keys(name).sort((a, b) => (total[b] || 0) - (total[a] || 0));
+      return { name, ids };
+    }
+    function fillGraphPersonSel() {
+      const { name, ids } = personUnion();
+      const sel = document.getElementById('gPersonSel');
+      const cur = sel.value;
+      sel.innerHTML = ids.map(id => `<option value="${esc(id)}">${esc(name[id])}</option>`).join('');
+      if (cur && ids.indexOf(cur) >= 0) sel.value = cur;
+    }
+    // 각 꼭지점 위에 금액(원) 라벨 그리기
+    const pointValueLabels = {
+      id: 'pointValueLabels',
+      afterDatasetsDraw(chart) {
+        const ctx = chart.ctx;
+        const meta = chart.getDatasetMeta(0);
+        const data = chart.data.datasets[0].data;
+        const color = chart.data.datasets[0].borderColor;
+        ctx.save();
+        ctx.font = '700 12px Pretendard, "Malgun Gothic", sans-serif';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = color;
+        meta.data.forEach((pt, i) => {
+          const v = data[i]; if (v == null) return;
+          const txt = won(v) + '원';
+          // 좌우 끝 점은 잘리지 않게 정렬 조정
+          ctx.textAlign = i === 0 ? 'left' : (i === meta.data.length - 1 ? 'right' : 'center');
+          ctx.fillText(txt, pt.x, pt.y - 9);
+        });
+        ctx.restore();
+      }
+    };
+    function drawChart(id, labels, data, label, color) {
+      if (typeof Chart === 'undefined') return;
+      if (charts[id]) charts[id].destroy();
+      const ctx = document.getElementById(id).getContext('2d');
+      const grad = ctx.createLinearGradient(0, 0, 0, 300);
+      grad.addColorStop(0, color + '55'); grad.addColorStop(1, color + '08');
+      charts[id] = new Chart(ctx, {
+        type: 'line',
+        plugins: [pointValueLabels],
+        data: { labels, datasets: [{ label, data, borderColor: color, backgroundColor: grad, fill: true, tension: 0.3, borderWidth: 3, pointRadius: 4, pointBackgroundColor: color, pointBorderColor: '#fff', pointBorderWidth: 2, spanGaps: true }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          layout: { padding: { top: 26, right: 12, left: 4 } },
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.y == null ? '-' : won(c.parsed.y) + '원' } } },
+          scales: { y: { beginAtZero: true, ticks: { callback: v => won(v) } }, x: { grid: { display: false } } }
+        }
+      });
+    }
+    function renderPersonGraph() {
+      const prop = document.getElementById('gMetricSel').value;
+      const id = document.getElementById('gPersonSel').value;
+      const { name } = personUnion();
+      const labels = monthData.map(md => smonth(md.month));
+      const series = monthData.map(md => { const p = md.byId[id]; return (p && p.sales) ? (p[prop] || 0) : null; });
+      drawChart('gPersonChart', labels, series, (name[id] || '') + ' ' + METRIC_LABEL[prop], '#2563eb');
+    }
+    function renderGraphs() {
+      if (!monthData.length) return;
+      const prop = document.getElementById('gMetricSel').value;
+      const labels = monthData.map(md => smonth(md.month));
+      const branch = monthData.map(md => md.r.ppl.filter(p => p.sales).reduce((s, p) => s + (p[prop] || 0), 0));
+      document.getElementById('gBranchSub').textContent = METRIC_LABEL[prop] + ' 합계 · 단위 원';
+      drawChart('gBranchChart', labels, branch, '지사 전체 ' + METRIC_LABEL[prop], '#ff6a00');
+      renderPersonGraph();
+    }
+    document.getElementById('gMetricSel').addEventListener('change', renderGraphs);
+    document.getElementById('gPersonSel').addEventListener('change', renderPersonGraph);
+
+    // ---- 탭 전환 & 컨트롤 ----
+    document.querySelector('.tabs2').addEventListener('click', e => {
+      const b = e.target.closest('button[data-tab]'); if (!b) return;
+      document.querySelectorAll('.tabs2 button').forEach(x => x.classList.toggle('active', x === b));
+      document.querySelectorAll('.tabsec').forEach(s => s.classList.remove('on'));
+      document.getElementById('sec-' + b.dataset.tab).classList.add('on');
+      if (b.dataset.tab === 'graph') renderGraphs();
+    });
+    document.getElementById('monthSel').addEventListener('change', e => renderMonth(e.target.value));
+    document.getElementById('metricSel').addEventListener('change', renderTrend);
+    document.getElementById('prodMonthSel').addEventListener('change', e => { fillPersonSel(e.target.value); renderProd(); });
+    document.getElementById('prodPersonSel').addEventListener('change', renderProd);
+
+    // ---- 월초 수정 (오타 정정 → 그 달 잠금) ----
+    function renderEditGrid(month) {
+      const md = snapByMonth[month]; if (!md) return;
+      const products = md.value.products || [];
+      const people = (md.value.people || []).filter(p => p.sales !== false);
+      const w = md.value.wolcho || {};
+      const head = `<thead><tr><th>코치</th>${products.map(pr => `<th class="num">${esc(pr.name)}</th>`).join('')}</tr></thead>`;
+      const body = people.map(per => `<tr><td>${esc(per.name)}</td>${products.map(pr =>
+        `<td class="num"><input class="ew-num" data-per="${esc(per.id)}" data-prod="${esc(pr.id)}" value="${(w[per.id] && w[per.id][pr.id]) || 0}" step="1"></td>`).join('')}</tr>`).join('');
+      document.getElementById('editTbl').innerHTML = head + '<tbody>' + body + '</tbody>';
+    }
+    document.getElementById('editBtn').addEventListener('click', () => {
+      if (!curMonth) return;
+      const mdc = snapByMonth[curMonth];
+      if (mdc && Array.isArray(mdc.value.contracts) && mdc.value.contracts.length) { alert('이 달은 계약 건별 입력으로 계산된 달입니다. 수정은 수수료 계산기의 건별 입력에서 해주세요.'); return; }
+      renderEditGrid(curMonth);
+      document.getElementById('editPanel').style.display = '';
+      document.getElementById('editBtn').style.display = 'none';
+    });
+    document.getElementById('editCancel').addEventListener('click', () => {
+      document.getElementById('editPanel').style.display = 'none';
+      document.getElementById('editBtn').style.display = '';
+    });
+    document.getElementById('editSave').addEventListener('click', async () => {
+      const md = snapByMonth[curMonth]; if (!md) return;
+      const w = {};
+      (md.value.people || []).forEach(per => { w[per.id] = (md.value.wolcho && md.value.wolcho[per.id]) ? Object.assign({}, md.value.wolcho[per.id]) : {}; });
+      document.querySelectorAll('#editTbl input.ew-num').forEach(inp => { const per = inp.dataset.per, prod = inp.dataset.prod; if (!w[per]) w[per] = {}; w[per][prod] = parseFloat(inp.value) || 0; });
+      md.value.wolcho = w; md.value.edited = true; md.value.savedAt = new Date().toISOString();
+      const btn = document.getElementById('editSave'); btn.disabled = true; btn.textContent = '저장 중…';
+      try { await SB.from('app_config').upsert({ key: 'snap_' + curMonth, value: md.value, updated_at: new Date().toISOString() }); }
+      catch (e) { alert('저장 실패: ' + e.message); btn.disabled = false; btn.textContent = '저장'; return; }
+      md.r = computeSnap(md.value); md.byId = {}; md.r.ppl.forEach(p => md.byId[p.idx] = p);
+      btn.disabled = false; btn.textContent = '저장';
+      document.getElementById('editPanel').style.display = 'none';
+      document.getElementById('editBtn').style.display = '';
+      renderMonth(curMonth); renderTrend();
+      fillGraphPersonSel(); if (document.getElementById('sec-graph').classList.contains('on')) renderGraphs();
+      if (document.getElementById('prodMonthSel').value === curMonth) { fillPersonSel(curMonth); renderProd(); }
+      alert('저장됐어요. 이 달은 이제 자동 변경에서 보호돼요 🔒');
+    });
+
+    init();
+  </script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

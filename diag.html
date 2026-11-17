@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>재무진단 DB · 지사 포털</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:6px 0 14px; }
+    .toolbar .grow { flex:1; min-width:150px; }
+    .inp { padding:10px 13px; border:1.5px solid var(--line-2); border-radius:10px; font-size:0.9rem; font-family:inherit; outline:none; background:#fff; }
+    .inp:focus { border-color:var(--brand); }
+    select.inp { cursor:pointer; }
+
+    .chip { font-size:0.76rem; font-weight:700; padding:3px 10px; border-radius:999px; white-space:nowrap; display:inline-block; }
+    .chip.dup { background:#fdecea; color:#c0392b; }
+    .lnk { color:var(--brand-dk); font-weight:700; cursor:pointer; border-bottom:1px dashed #f0c9a8; }
+    .lnk:hover { background:var(--brand-sft); }
+
+    .stat { cursor:pointer; border:1.5px solid transparent; }
+    .stat:hover { border-color:#f5c9a0; }
+    .stat.on { border-color:var(--brand); }
+
+    /* 표 안에서 바로 고치는 선택칸 (진행상태 색) */
+    .cell-sel { padding:5px 8px; border:1.5px solid var(--line-2); border-radius:8px; font-size:0.82rem; font-family:inherit; background:#fff; cursor:pointer; outline:none; font-weight:700; color:#4e5968; }
+    .cell-sel.s0 { background:#eef1f5; color:#8a929e; border-color:#e2e6ec; }
+    .cell-sel.s1 { background:#e8f1fd; color:#3f6ad8; border-color:#d3e2fb; }
+    .cell-sel.s2 { background:#fdf3e3; color:#c07602; border-color:#f7e4c2; }
+    .cell-sel.s3 { background:#e6f7f1; color:#15803d; border-color:#c9ecdd; }
+    .cell-sel.s4 { background:#fdecea; color:#c0392b; border-color:#f6d2ce; }
+    .cell-sel.s5 { background:#f3e8fd; color:#7c3aed; border-color:#e5d4f9; }
+
+    .tbl td, .tbl th { padding:10px 11px; white-space:nowrap; }
+    .tbl tbody tr { cursor:pointer; }
+    .tbl tbody tr.dragging { opacity:.4; }
+    .tbl tbody tr.dragover td { border-top:2.5px solid var(--brand); }
+    .tbl td.center, .tbl th.center { text-align:center; }
+    .tbl .name { font-weight:700; }
+    .drag-handle { cursor:grab; color:#c6ccd4; font-size:1rem; padding:0 2px; user-select:none; }
+    .row-btn { background:#f2f4f6; border:1px solid var(--line-2); border-radius:8px; padding:4px 8px; cursor:pointer; font-size:0.85rem; margin-left:4px; }
+    .row-btn:hover { background:#e8ebee; }
+    .mini { color:var(--text-mute); font-size:0.8rem; }
+    .memo-cell { white-space:normal; max-width:170px; color:var(--text-soft); font-size:0.84rem; cursor:text; }
+    .memo-cell:hover { background:var(--brand-sft); border-radius:6px; }
+    .memo-edit { width:100%; min-width:150px; padding:6px 8px; border:1.5px solid var(--brand); border-radius:8px; font-size:0.84rem; font-family:inherit; resize:vertical; min-height:40px; outline:none; }
+    .chk { width:16px; height:16px; accent-color:var(--brand); cursor:pointer; }
+    .bulkbar { display:none; flex-wrap:wrap; gap:8px; align-items:center; background:var(--brand-sft); border:1px solid #f5c9a0; border-radius:11px; padding:9px 12px; margin-bottom:10px; }
+    .bulkbar.on { display:flex; }
+    .bulkbar b { color:var(--brand-dk); }
+    .bulkbar .inp { padding:7px 10px; font-size:0.84rem; }
+    .bulkbar .btn { padding:8px 12px; font-size:0.84rem; }
+    .prod-cell { max-width:200px; overflow:hidden; text-overflow:ellipsis; font-size:0.84rem; }
+    .empty { color:var(--text-mute); font-size:0.9rem; padding:30px 4px; text-align:center; }
+    .hint-strip { background:var(--brand-sft); border:1px solid #f5c9a0; color:var(--brand-dk); padding:9px 14px; border-radius:11px; font-size:0.83rem; font-weight:600; margin-bottom:12px; }
+
+    .modal-bg { display:none; position:fixed; inset:0; background:rgba(16,24,40,.45); z-index:80; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto; }
+    .modal-bg.open { display:flex; }
+    .modal { background:#fff; border-radius:18px; box-shadow:0 24px 60px -12px rgba(16,24,40,.4); width:100%; max-width:640px; }
+    .modal.lg { max-width:780px; }
+    .modal-head { padding:20px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+    .modal-head h2 { font-size:1.1rem; font-weight:800; letter-spacing:-.4px; }
+    .modal-x { background:none; border:none; font-size:1.4rem; line-height:1; cursor:pointer; color:var(--text-mute); padding:2px 6px; }
+    .modal-x:hover { color:var(--text); }
+    .modal-body { padding:20px 24px; }
+    .modal-foot { padding:16px 24px; border-top:1px solid var(--line); display:flex; gap:10px; justify-content:flex-end; align-items:center; flex-wrap:wrap; }
+    .fld { margin-bottom:14px; }
+    .fld > label { display:block; font-size:0.82rem; font-weight:700; margin-bottom:6px; color:var(--text-soft); }
+    .fld .inp, .fld textarea { width:100%; }
+    .fld textarea { padding:11px 13px; border:1.5px solid var(--line-2); border-radius:10px; font-size:0.9rem; font-family:inherit; resize:vertical; min-height:60px; outline:none; }
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    @media(max-width:560px){ .row2 { grid-template-columns:1fr; } }
+    .preview-box { border:1px solid var(--line); border-radius:12px; max-height:300px; overflow:auto; margin-top:6px; }
+    .preview-box table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+    .preview-box th { position:sticky; top:0; background:#f7f8fa; padding:8px 10px; text-align:left; color:var(--text-soft); font-size:0.74rem; font-weight:700; }
+    .preview-box td { padding:7px 10px; border-top:1px solid var(--line); }
+    .preview-box tr.skip td { background:#fdecea; color:#a33; text-decoration:line-through; }
+    .tag-new { color:var(--brand-dk); font-weight:700; }
+    .summary-note { font-size:0.82rem; color:var(--text-soft); margin:0 0 4px; }
+    .danger { background:#fff; color:var(--neg); border:1px solid #f3c7c2; }
+    .danger:hover { background:#fdecea; }
+
+    .sec { font-size:0.78rem; font-weight:800; color:var(--brand-dk); letter-spacing:.5px; margin:18px 0 9px; padding-bottom:6px; border-bottom:2px solid var(--brand); }
+    .nums { display:grid; grid-template-columns:repeat(auto-fit,minmax(100px,1fr)); gap:9px; margin-bottom:6px; }
+    .num { background:#fbf9f6; border:1px solid #f0e4d4; border-radius:11px; padding:10px 12px; }
+    .num .k { font-size:0.72rem; color:var(--text-mute); margin-bottom:2px; }
+    .num .v { font-size:1rem; font-weight:800; }
+    .acts { display:flex; gap:9px; margin-top:14px; flex-wrap:wrap; }
+    .acts a, .acts button { flex:1; min-width:120px; text-align:center; padding:12px; border-radius:11px; font-size:0.92rem; font-weight:800; cursor:pointer; text-decoration:none; border:none; font-family:inherit; }
+    .acts .pri { background:var(--brand); color:#fff; }
+    .acts .sec2 { background:#f2f4f6; color:#4e5968; }
+    .note { font-size:0.8rem; color:var(--text-mute); margin-top:10px; line-height:1.55; }
+
+    /* 고객이 재무현황표에 직접 적은 숫자 전체 (접기/펴기) — 형님 지시 2026-08-05 */
+    .rawbox { margin:12px 0 2px; border:1px solid #f0e4d4; border-radius:12px; background:#fffdfa; overflow:hidden; }
+    .rawbox > summary { cursor:pointer; list-style:none; padding:11px 14px; font-size:0.86rem; font-weight:800; color:var(--brand-dk); display:flex; align-items:center; gap:8px; }
+    .rawbox > summary::-webkit-details-marker { display:none; }
+    .rawbox > summary::before { content:'＋'; font-weight:800; }
+    .rawbox[open] > summary::before { content:'－'; }
+    .rawbox[open] > summary { border-bottom:1px solid #f0e4d4; }
+    .rawin { padding:12px 14px 14px; }
+    .rtabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+    .rtab { padding:6px 11px; border-radius:999px; border:1px solid var(--line); background:#fff; font-size:0.78rem; font-weight:700; color:var(--text-soft); cursor:pointer; font-family:inherit; }
+    .rtab.on { background:var(--brand); border-color:var(--brand); color:#fff; }
+    .rpan { display:none; }
+    .rpan.on { display:block; }
+    .rawwhen { font-size:0.76rem; color:var(--text-mute); margin-bottom:8px; }
+    .rawgrp { margin-bottom:12px; }
+    .rawgt { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:0.76rem; font-weight:800; color:var(--text-soft); background:#f7f8fa; border-radius:8px; padding:6px 10px; margin-bottom:2px; }
+    .rawsum { font-size:0.74rem; font-weight:800; color:var(--brand-dk); white-space:nowrap; }
+    .rawtb { width:100%; border-collapse:collapse; font-size:0.85rem; table-layout:fixed; }
+    .rawtb td { padding:6px 10px; border-bottom:1px solid #f2f4f6; word-break:keep-all; }
+    .rawtb tr:last-child td { border-bottom:none; }
+    .rawtb td:first-child { color:var(--text-soft); }
+    .rawv { text-align:right; font-weight:800; white-space:nowrap; width:38%; }
+    .rawv.e { font-weight:400; }
+    .rawnull { color:#c4c9d0; }
+    .rawu { font-size:0.74rem; font-weight:600; color:var(--text-mute); margin-left:2px; }
+    .rawnone { font-size:0.84rem; color:var(--text-soft); background:#f7f8fa; border-radius:10px; padding:12px 14px; line-height:1.6; }
+  </style>
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="diag"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div><h1>재무진단 DB</h1><div class="sub">재무진단 신청자 명단 · 상담 진행 관리 (신청 자동 수집은 연결 전입니다)</div></div>
+      </div>
+      <button class="btn btn-brand" id="btnPaste">📋 명단 붙여넣기</button>
+    </header>
+
+    <div class="content">
+      <div id="mergeNote" class="hint-strip" style="display:none"></div>
+      <div class="stat-grid" id="stats"></div>
+      <div class="panel">
+        <div class="panel-body">
+          <div class="toolbar">
+            <input class="inp grow" id="q" placeholder="🔎 이름·연락처 검색" />
+            <select class="inp" id="fSource"><option value="">속성 전체</option></select>
+            <select class="inp" id="fStatus"><option value="">진행상태 전체</option></select>
+            <select class="inp" id="fConsultant"><option value="">상담인 전체</option></select>
+            <select class="inp" id="fCloser"><option value="">계약자 전체</option></select>
+            <select class="inp" id="fRef"><option value="">추천인 전체</option></select>
+            <select class="inp" id="fProduct"><option value="">상품 전체</option></select>
+            <select class="inp" id="fCancel"><option value="">철회/해지 전체</option><option value="철회">철회</option><option value="해지">해지</option></select>
+            <select class="inp" id="fSort"><option value="new">최신순</option><option value="manual">내 순서 (드래그로 변경)</option><option value="name">이름순</option></select>
+            <button class="btn btn-ghost" id="btnAddOne">＋ 한 명</button>
+            <button class="btn btn-ghost" id="btnExport">⬇ CSV</button>
+            <button class="btn btn-ghost" id="btnNames">👥 상담인·계약자 명단</button>
+            <button class="btn btn-ghost" id="btnTrash">🗑 휴지통</button>
+          </div>
+          <div id="bulkBar" class="bulkbar">
+            <b><span id="selCnt">0</span>명 선택됨</b>
+            <select class="inp" id="bStatus"><option value="">진행상태 일괄변경</option></select>
+            <select class="inp" id="bConsultant"><option value="">상담인 일괄지정</option></select>
+            <select class="inp" id="bCloser"><option value="">계약자 일괄지정</option></select>
+            <input class="inp" id="bSource" placeholder="속성 일괄입력" style="width:140px" list="sourceList">
+            <button class="btn btn-ghost" id="bSourceGo">속성 적용</button>
+            <button class="btn danger" id="bDelete">🗑 선택 삭제</button>
+            <button class="btn btn-ghost" id="bCsv">⬇ 선택 CSV</button>
+            <button class="btn btn-ghost" id="bClear">선택 해제</button>
+          </div>
+          <div id="dragHint" class="mini" style="margin-bottom:8px">☑ 맨 왼쪽 체크박스로 여러 명 선택하면 위에 일괄 작업 버튼이 나타납니다 · 메모 칸은 클릭해서 바로 입력 · ↕ ⠿를 끌면 순서 변경 · ✏️🗑는 맨 오른쪽 관리 칸<span id="saveStamp" style="margin-left:10px;color:#15803d;font-weight:700"></span></div>
+          <div style="overflow-x:auto;">
+            <table class="tbl">
+              <thead><tr>
+                <th class="center"><input type="checkbox" class="chk" id="chkAll" title="보이는 목록 전체 선택"></th>
+                <th></th><th class="center">번호</th><th>신청자</th><th>연락처</th><th>신청일</th><th>속성</th><th class="center">진행상태</th>
+                <th>상담인</th><th>계약자</th><th>추천인</th><th>상품</th><th>메모</th><th class="center">철회/해지</th><th class="center">관리</th>
+              </tr></thead>
+              <tbody id="rows"><tr><td colspan="15" class="empty">불러오는 중…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <datalist id="sourceList"></datalist>
+  <datalist id="refList"></datalist>
+
+  <!-- 개인 추가/편집 모달 -->
+  <div class="modal-bg" id="editModal">
+    <div class="modal">
+      <div class="modal-head"><h2 id="editTitle">신청자 정보</h2><button class="modal-x" data-close>×</button></div>
+      <div class="modal-body">
+        <div class="row2">
+          <div class="fld"><label>신청자 (이름)</label><input class="inp" id="eName"></div>
+          <div class="fld"><label>연락처</label><input class="inp" id="ePhone"></div>
+        </div>
+        <div class="row2">
+          <div class="fld"><label>신청일</label><input class="inp" type="date" id="eDate"></div>
+          <div class="fld"><label>진행상태</label><select class="inp" id="eStatus"></select></div>
+        </div>
+        <div class="row2">
+          <div class="fld"><label>속성 <span class="mini">(주관식)</span></label><input class="inp" id="eSource" list="sourceList" placeholder="예: 머니메이커스 강의"></div>
+          <div class="fld"><label>추천인 <span class="mini">(주관식)</span></label><input class="inp" id="eRef" list="refList"></div>
+        </div>
+        <div class="row2">
+          <div class="fld"><label>상담인</label><select class="inp" id="eConsultant"></select></div>
+          <div class="fld"><label>계약자 <span class="mini">(계약시킨 우리 쪽 사람)</span></label><select class="inp" id="eCloser"></select></div>
+        </div>
+        <div class="row2">
+          <div class="fld"><label>상품 <span class="mini">(주관식)</span></label><input class="inp" id="eProduct" placeholder="예: IBK연금 변액연금 30만 / 10년"></div>
+          <div class="fld"><label>철회/해지</label><select class="inp" id="eCancel"><option value="">해당 없음</option><option value="철회">철회</option><option value="해지">해지</option></select></div>
+        </div>
+        <div class="fld"><label>메모</label><textarea id="eMemo"></textarea></div>
+        <div id="diagInfo"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn danger" id="btnDelPerson" style="margin-right:auto;">🗑 삭제</button>
+        <button class="btn btn-ghost" data-close>취소</button>
+        <button class="btn btn-brand" id="btnSavePerson">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 명단 붙여넣기 모달 -->
+  <div class="modal-bg" id="pasteModal">
+    <div class="modal lg">
+      <div class="modal-head"><h2>명단 붙여넣기</h2><button class="modal-x" data-close>×</button></div>
+      <div class="modal-body">
+        <p class="summary-note">엑셀/시트에서 <b>이름 · 전화번호 · 추천인</b> 순으로 복사해 붙여넣으세요. (탭 구분) · 속성·상담인 등은 이후 표에서 수기.</p>
+        <div class="fld" style="max-width:240px;"><label>신청일/등록일 <span class="mini">(이 묶음 공통)</span></label><input class="inp" type="date" id="pDate"></div>
+        <div class="fld">
+          <label>명단 <span class="mini">(한 줄에 한 명 · "이름[탭]전화[탭]추천인")</span></label>
+          <textarea id="pasteText" style="min-height:150px;" placeholder="예)&#10;홍길동	010-1234-5678	박민수&#10;김철수	010-2345-6789	"></textarea>
+        </div>
+        <div id="previewWrap" style="display:none;">
+          <p class="summary-note" id="previewSummary"></p>
+          <div class="preview-box">
+            <table><thead><tr><th>이름</th><th>연락처</th><th>추천인</th><th>구분</th></tr></thead><tbody id="previewRows"></tbody></table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" data-close>취소</button>
+        <button class="btn btn-ghost" id="btnPreview">미리보기</button>
+        <button class="btn btn-brand" id="btnCommit" style="display:none;">✔ 확정 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 상담인·계약자 명단 관리 모달 -->
+  <div class="modal-bg" id="namesModal">
+    <div class="modal">
+      <div class="modal-head"><h2>상담인·계약자 명단</h2><button class="modal-x" data-close>×</button></div>
+      <div class="modal-body">
+        <p class="summary-note">상담인·계약자 칸에서 고를 수 있는 이름들입니다. 추가·삭제할 수 있어요.</p>
+        <div id="nameChips" style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0"></div>
+        <div style="display:flex;gap:8px">
+          <input class="inp" id="newName" placeholder="새 이름" style="flex:1">
+          <button class="btn btn-brand" id="btnAddName">＋ 추가</button>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn btn-ghost" data-close>닫기</button></div>
+    </div>
+  </div>
+
+  <!-- 휴지통 모달 -->
+  <div class="modal-bg" id="trashModal">
+    <div class="modal">
+      <div class="modal-head"><h2>🗑 휴지통</h2><button class="modal-x" data-close>×</button></div>
+      <div class="modal-body">
+        <p class="summary-note">삭제한 사람들입니다. <b>↩ 복원</b>하면 명단으로 돌아오고, <b>완전 삭제</b>하면 휴지통에서도 지워집니다 (재무진단 신청 원본 기록은 남습니다).</p>
+        <div id="trashList"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" id="btnRestoreAll" style="margin-right:auto">↩ 전부 복원</button>
+        <button class="btn danger" id="btnPurgeAll">휴지통 비우기</button>
+        <button class="btn btn-ghost" data-close>닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script>
+  (function () {
+    /* 접근 권한 — 고객 DB관리와 동일 (관리자 · 한채혁 · 매니저) */
+    const auth = JSON.parse(localStorage.getItem('hwAuth') || 'null');
+    const ALLOWED_PERSONS = ['hcw', 'team'];
+    const canAccess = auth && (auth.role === 'boss' || ALLOWED_PERSONS.includes(auth.personId));
+    if (!canAccess) { alert('접근 권한이 없습니다.'); location.href = 'index.html'; return; }
+
+    /* 재무진단 DB — kim-advisor 쪽 Supabase (포털과 다른 프로젝트)
+       ★2026-08-12: 8/11에 붙였던 "재무진단 DB 로그인" 칸을 도로 뗐다(형님 지시).
+         이 화면은 예전처럼 로그인 없이 바로 목록을 읽고 저장한다.
+         대신 아래 loadAllCore·refreshStore·savePeople 에 "명단을 제대로 못 읽었으면
+         절대 저장하지 않는다"는 안전장치를 넣어, 읽기가 잘못돼도 기존 기록이
+         빈 값으로 덮어써지지 않게 했다. */
+    const SBD = SB;
+
+    const CALC_SITE = 'https://mymoney-calc.netlify.app';
+    const CALC_URL  = CALC_SITE + '/diag/';
+    const PDF_FN    = CALC_SITE + '/.netlify/functions/make-pdf';
+
+    const STATUSES = ['미연락', '연락완료', '상담완료', '계약', '거절', '보류'];
+    const STATUS_CLS = { '미연락':'s0', '연락완료':'s1', '상담완료':'s2', '계약':'s3', '거절':'s4', '보류':'s5' };
+    const DEFAULT_NAMES = ['김병인', '박효은', '우재원', '김태연', '김동휘'];
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const digitsOnly = s => String(s == null ? '' : s).replace(/\D/g, '');
+    function normPhone(s) { let d = digitsOnly(s); if (d.startsWith('82')) d = '0' + d.slice(2); return (d.length === 10 || d.length === 11) ? d : null; }
+
+/* ── 삭제했던 사람이 "삭제한 뒤에" 새로 신청했으면 명단에 다시 올린다 (2026-08-14) ──
+   왜 필요한가: 삭제하면 전화번호를 hidden에 기억해 자동 재유입을 막는데,
+   그 사람이 진짜로 다시 신청해도 영영 표에 안 뜨는 문제가 있었다(형님 본인 신청이 안 들어옴).
+   판단 기준: 휴지통에 남은 삭제 시각(deleted_ts, 없으면 날짜 deleted_at)보다
+   신청 시각이 나중이면 = 삭제 후 재신청 → 되살린다.
+   삭제 시점을 모르면(휴지통을 비워 기록이 없으면) 그대로 숨김을 유지한다. */
+function reviveIfReapplied(key, latestTs, latestDate) {
+  const isName = String(key).startsWith('name:');
+  const i = trash.findIndex(t => isName ? ('name:' + ((t.name || '').trim())) === key : normPhone(t.phone) === key);
+  const t = i >= 0 ? trash[i] : null;
+  let reapplied = false;
+  if (t && t.deleted_ts) reapplied = (latestTs || '') > t.deleted_ts;        // 시각까지 비교 (같은 날 재신청도 잡힘)
+  else if (t && t.deleted_at) reapplied = (latestDate || '') > t.deleted_at;  // 옛 기록은 날짜만 있어 날짜로 비교
+  if (!reapplied) return false;
+  hidden = hidden.filter(h => h !== key);
+  if (i >= 0) trash.splice(i, 1);
+  return true;
+}
+    function fmtPhone(s) { const d = digitsOnly(s); if (d.length === 11) return d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7); if (d.length === 10) return d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6); return String(s || ''); }
+    const today = () => new Date().toISOString().slice(0, 10);
+    const uid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+    let people = [];
+    let hidden = [];
+    let trash = [];
+    let names = [];
+    let LEADS = [];
+    let DIAG = {};
+    let statusFilterFromCard = '';
+    let selected = new Set();   // 체크박스로 고른 사람들 (일괄 작업 대상)
+    let parsed = null;
+
+    /* ── 저장소 (kim-advisor app_config — 형님 관리자 사이트와 같은 데이터 공유) ── */
+    /* ★★2026-09-04 보안 수정 — 표를 브라우저에서 직접 읽지 않는다.
+       왜: 신청자 표(diag_leads 97건 = 이름·생년월일·전화번호·이메일)와 이 명단이
+       "로그인 안 한 아무나" 읽을 수 있는 상태였다. 이 화면만 로그인 없이 읽고 있어서
+       표를 잠글 수가 없었다(2026-08-11 발견 → 08-12 로그인 칸을 뗀 뒤 그대로 남음).
+       이제는 넷리파이 함수(diag-data)가 가운데서 신분을 확인하고 자료를 건네준다.
+       화면은 '지금 포털에 로그인된 증표'를 같이 보낸다 → 로그인을 두 번 하지 않는다. */
+    async function apiCall(action, payload){
+      let token = '';
+      try { const { data } = await SB.auth.getSession(); token = (data && data.session && data.session.access_token) || ''; } catch (e) {}
+      const r = await fetch('/.netlify/functions/diag-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify(Object.assign({ action }, payload || {})),
+      });
+      let j = {};
+      try { j = await r.json(); } catch (e) {}
+      if (!r.ok) throw new Error(j.error || ('요청 실패 HTTP ' + r.status));
+      return j;
+    }
+    async function cfgGet(key, fallback){
+      const j = await apiCall('cfgGet', { key });   // 실패하면 위에서 예외를 던진다
+      return (j && j.value != null) ? j.value : fallback;
+    }
+    async function cfgSet(key, value){
+      try { await apiCall('cfgSet', { key, value }); return true; }
+      catch (e) { alert('저장 실패: ' + e.message); return false; }
+    }
+    /* ★안전장치 (2026-08-12) — "저장하다 기록이 날아가는 것"을 막는 빗장 두 개
+       ① 서버에서 명단을 제대로 한 번 읽기 전에는 아무것도 저장하지 않는다
+          (못 읽은 걸 "명단이 없다"로 착각해 빈 명단으로 덮어쓰는 사고 방지)
+       ② 갖고 있던 명단이 통째로 비어버리는 저장(예: 52명 → 0명)은 막는다 */
+    let peopleLoaded = false;   // 명단을 서버에서 정상으로 읽었는가
+    let lastCount = 0;          // 마지막으로 정상 확인한 명단 인원
+    const savePeople = async () => {
+      if (!peopleLoaded) {
+        alert('명단을 아직 불러오지 못해서 저장하지 않았습니다.\n새로고침(F5) 후 다시 해주세요.\n\n※ 서버에 저장된 기존 기록은 그대로 있습니다.');
+        return false;
+      }
+      if (people.length === 0 && lastCount > 0) {
+        alert('명단이 통째로 비는 저장이라 막았습니다.\n새로고침(F5) 후 다시 확인해주세요.\n\n※ 서버에 저장된 기존 기록은 그대로 있습니다.');
+        return false;
+      }
+      const ok = await cfgSet('advisor_people', { people, hidden, trash });
+      if (ok) { lastCount = people.length; stamp(); }
+      return ok;
+    };
+    const saveNames  = () => cfgSet('advisor_consultants', names);
+    function stamp(){ const el = $('saveStamp'); if (el) el.textContent = '💾 자동저장됨 ' + new Date().toTimeString().slice(0, 8); }
+
+    /* 수정·삭제 직전에 서버 최신본을 다시 받아온다 — 다른 탭·형님 사이트와 동시에 써도 서로 덮어쓰지 않게 */
+    async function refreshStore(){
+      const v = await cfgGet('advisor_people', null);
+      /* ★값이 안 오면 "명단이 비었다"가 아니라 "못 읽었다"로 본다 —
+         여기서 멈춰야 뒤이은 저장이 기존 기록을 지우지 않는다 (2026-08-12) */
+      if (v == null || !Array.isArray(v.people)) throw new Error('명단을 읽지 못했습니다');
+      people = v.people;
+      hidden = v.hidden || [];
+      trash  = v.trash || [];
+      peopleLoaded = true; lastCount = people.length;
+    }
+    async function freshOrWarn(){
+      try { await refreshStore(); return true; }
+      catch (e) { alert('인터넷 연결 문제로 방금 동작을 저장하지 못했어요. 새로고침(F5) 후 다시 해주세요.'); return false; }
+    }
+    async function freshNames(){
+      try { const nv = await cfgGet('advisor_consultants', null); if (nv) names = nv; return true; }
+      catch (e) { alert('인터넷 연결 문제로 이름 명단을 저장하지 못했어요. 새로고침(F5) 후 다시 해주세요.'); return false; }
+    }
+    /* 저장 줄세우기: 빠르게 연달아 고쳐도 앞 수정이 뒤 수정에 밀려 사라지지 않게, 동작을 순서대로 하나씩 처리 */
+    let opChain = Promise.resolve();
+    function enqueue(fn){ const p = opChain.then(fn, fn); opChain = p.catch(() => {}); return p; }
+
+    function loadAll(){ return enqueue(loadAllCore); }   // 불러오기도 같은 줄에 세워 수정 동작과 충돌하지 않게
+    async function loadAllCore(){
+      let leadsRes, peopleVal, namesVal;
+      try {
+        // ★2026-09-04: 세 가지를 창구(diag-data)에서 한 번에 받는다. 신분 확인은 그쪽에서 한다.
+        const d = await apiCall('load');
+        leadsRes  = { data: d.leads || [], error: null };
+        peopleVal = d.people;
+        namesVal  = d.consultants;
+      } catch (e) {
+        $('rows').innerHTML = `<tr><td colspan="15" class="empty">저장소를 읽지 못했어요 — 잠시 후 새로고침(F5) 해주세요.<br><span class="mini">${esc(e.message)}</span></td></tr>`;
+        return;
+      }
+      if (leadsRes.error) {
+        $('rows').innerHTML = `<tr><td colspan="15" class="empty">신청자 목록을 불러오지 못했습니다 — ${esc(leadsRes.error.message)}<br><span class="mini">새로고침(F5) 해주세요. 저장된 기록은 그대로 있습니다.</span></td></tr>`;
+        return;
+      }
+      LEADS = leadsRes.data || [];
+
+      /* ★명단(진행상태·상담인 등)을 못 읽었으면 여기서 멈춘다 (2026-08-12)
+         빈 명단으로 화면을 그려버리면, 바로 아래 "새 신청자 자동추가"가 돌면서
+         서버에 저장돼 있던 기존 기록을 통째로 덮어써버린다. */
+      if (peopleVal == null || !Array.isArray(peopleVal.people)) {
+        $('rows').innerHTML = `<tr><td colspan="15" class="empty">명단(진행상태·상담인)을 읽지 못했어요 — 새로고침(F5) 해주세요.<br><span class="mini">안전을 위해 이 화면은 아무것도 저장하지 않습니다. 서버에 저장된 기존 기록은 그대로 있습니다.</span></td></tr>`;
+        return;
+      }
+      people = peopleVal.people;
+      hidden = peopleVal.hidden || [];
+      trash  = peopleVal.trash || [];
+      peopleLoaded = true; lastCount = people.length;
+      names = namesVal || DEFAULT_NAMES.slice();
+      if (!namesVal) saveNames();
+
+      DIAG = {};
+      const noPhoneLeads = [];
+      for (const l of LEADS) {
+        const ph = normPhone(l.phone);
+        if (!ph) { noPhoneLeads.push(l); continue; }
+        const d = (l.created_at || '').slice(0, 10);
+        const ts = l.created_at || '';
+        const g = DIAG[ph] || { count: 0, latest: '', latestTs: '', lead: null, all: [] };
+        g.count++;
+        g.all.push(l);                                                    // 회차별 입력값을 전부 보관 (모달 '회차 탭'용)
+        if (!g.lead || ts >= g.latestTs) { g.latestTs = ts; g.lead = l; }   // 같은 날 2번 신청도 시각까지 비교해 진짜 최신을 고른다
+        if (d >= g.latest) g.latest = d;
+        DIAG[ph] = g;
+      }
+      for (const g of Object.values(DIAG)) g.all.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));   // 최신 신청이 맨 앞
+      let added = 0, bumped = 0, revived = 0;
+      for (const [ph, g] of Object.entries(DIAG)) {
+        if (hidden.includes(ph)) { if (!reviveIfReapplied(ph, g.latestTs, g.latest)) continue; revived++; }   // 삭제했던 사람도 그 뒤에 다시 신청했으면 되살린다
+        const p = people.find(x => normPhone(x.phone) === ph);
+        if (!p) { people.unshift({ id: uid(), name: (g.lead.name || '(이름없음)').trim(), phone: ph, db_date: g.latest, source: '', status: '미연락', consultant: '', closer: '', referrer: '', product: '', memo: '', cancel: '' }); added++; }
+        else if (g.latest && (p.db_date || '') < g.latest) { p.db_date = g.latest; bumped++; }
+      }
+      for (const l of noPhoneLeads) {
+        const nm = (l.name || '').trim();
+        if (hidden.includes('name:' + nm)) { if (!reviveIfReapplied('name:' + nm, l.created_at || '', (l.created_at || '').slice(0, 10))) continue; revived++; }
+        if (nm && !people.some(x => (x.name || '') === nm && !x.phone)) {
+          people.unshift({ id: uid(), name: nm, phone: '', db_date: (l.created_at || '').slice(0, 10), source: '', status: '미연락', consultant: '', closer: '', referrer: '', product: '', memo: '', cancel: '' });
+          added++;
+        }
+      }
+      if (added || bumped || revived) await savePeople();
+      const msg = [];
+      if (added) msg.push(`새 신청자 <b>${added}명</b>을 명단에 추가했어요.`);
+      if (bumped) msg.push(`재신청자 <b>${bumped}명</b>은 신청일을 최신으로 당겼어요.`);
+  if (revived) msg.push(`삭제했던 <b>${revived}명</b>이 다시 신청해서 명단에 되살렸어요.`);
+      if (msg.length) { $('mergeNote').style.display = ''; $('mergeNote').innerHTML = '🔄 ' + msg.join(' · '); }
+      else $('mergeNote').style.display = 'none';
+      render();
+    }
+
+    /* ── 통계 카드: 총인원 + 진행상태별 ── */
+    function renderStats(){
+      const cards = [{ label: '총인원', key: '', n: people.length }]
+        .concat(STATUSES.map(s => ({ label: s, key: s, n: people.filter(p => (p.status || '미연락') === s).length })));
+      let html = cards.map(c => `<div class="stat${statusFilterFromCard === c.key ? ' on' : ''}" data-k="${esc(c.key)}"><div class="label">${c.label}</div><div class="value">${c.n.toLocaleString('ko-KR')}<small> 명</small></div></div>`).join('');
+      /* 상담인별 현황 카드 — 누르면 그 상담인만 필터 */
+      const bycon = {};
+      people.forEach(p => { if (p.consultant) bycon[p.consultant] = (bycon[p.consultant] || 0) + 1; });
+      html += Object.entries(bycon).sort((a, b) => b[1] - a[1])
+        .map(([n, c]) => `<div class="stat${$('fConsultant').value === n ? ' on' : ''}" data-con="${esc(n)}"><div class="label">👤 ${esc(n)}</div><div class="value">${c}<small> 명</small></div></div>`).join('');
+      $('stats').innerHTML = html;
+      document.querySelectorAll('#stats .stat').forEach(el => el.addEventListener('click', () => {
+        if (el.dataset.con != null) {
+          $('fConsultant').value = $('fConsultant').value === el.dataset.con ? '' : el.dataset.con;
+        } else {
+          statusFilterFromCard = el.dataset.k;
+          $('fStatus').value = statusFilterFromCard;
+        }
+        render();
+      }));
+    }
+
+    function distinct(field){ return [...new Set(people.map(p => (p[field] || '').trim()).filter(Boolean))]; }
+    function setFilterOptions(el, label, values){
+      const cur = el.value;
+      el.innerHTML = `<option value="">${label}</option>` + values.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
+    }
+    function refreshOptionLists(){
+      setFilterOptions($('fSource'), '속성 전체', distinct('source'));
+      setFilterOptions($('fStatus'), '진행상태 전체', STATUSES.slice()); if (statusFilterFromCard) $('fStatus').value = statusFilterFromCard;
+      setFilterOptions($('fConsultant'), '상담인 전체', [...new Set(names.concat(distinct('consultant')))]);
+      setFilterOptions($('fCloser'), '계약자 전체', [...new Set(names.concat(distinct('closer')))]);
+      setFilterOptions($('fRef'), '추천인 전체', distinct('referrer'));
+      setFilterOptions($('fProduct'), '상품 전체', distinct('product'));
+      setFilterOptions($('bStatus'), '진행상태 일괄변경', STATUSES.slice());
+      setFilterOptions($('bConsultant'), '상담인 일괄지정', [...new Set(names.concat(distinct('consultant')))]);
+      setFilterOptions($('bCloser'), '계약자 일괄지정', [...new Set(names.concat(distinct('closer')))]);
+      $('sourceList').innerHTML = distinct('source').map(v => `<option value="${esc(v)}">`).join('');
+      $('refList').innerHTML = distinct('referrer').map(v => `<option value="${esc(v)}">`).join('');
+    }
+
+    function filteredSorted(){
+      const q = $('q').value.trim().toLowerCase(); const qd = digitsOnly(q);
+      const fSource = $('fSource').value, fStatus = $('fStatus').value, fCon = $('fConsultant').value, fClo = $('fCloser').value, fRef = $('fRef').value, fProduct = $('fProduct').value, fCancel = $('fCancel').value, fSort = $('fSort').value;
+      let list = people.filter(p => {
+        if (q) { const hn = (p.name || '').toLowerCase().includes(q); const hp = qd && digitsOnly(p.phone).includes(qd); if (!hn && !hp) return false; }
+        if (fSource && (p.source || '') !== fSource) return false;
+        if (fStatus && (p.status || '미연락') !== fStatus) return false;
+        if (fCon && (p.consultant || '') !== fCon) return false;
+        if (fClo && (p.closer || '') !== fClo) return false;
+        if (fRef && (p.referrer || '') !== fRef) return false;
+        if (fProduct && (p.product || '') !== fProduct) return false;
+        if (fCancel && (p.cancel || '') !== fCancel) return false;
+        return true;
+      });
+      if (fSort === 'name') list = list.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+      else if (fSort === 'new') list = list.slice().sort((a, b) => { const da = a.db_date || '', db = b.db_date || ''; return da === db ? 0 : (da < db ? 1 : -1); });
+      return list;
+    }
+
+    function statusSel(p){ const s = p.status || '미연락'; return `<select class="cell-sel ${STATUS_CLS[s] || 's0'}" data-id="${p.id}" data-field="status">${STATUSES.map(v => `<option value="${esc(v)}"${v === s ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select>`; }
+    function cancelSel(p){ const c = p.cancel || ''; return `<select class="cell-sel${c ? ' s4' : ''}" data-id="${p.id}" data-field="cancel"><option value="">-</option><option value="철회"${c === '철회' ? ' selected' : ''}>철회</option><option value="해지"${c === '해지' ? ' selected' : ''}>해지</option></select>`; }
+    function personSel(p, field){ const cur = p[field] || ''; const opts = [...new Set(names.concat(cur ? [cur] : []))]; return `<select class="cell-sel" data-id="${p.id}" data-field="${field}"><option value="">-</option>${opts.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('')}<option value="__add">＋ 추가…</option></select>`; }
+    function dupChip(p){
+      const g = DIAG[normPhone(p.phone)];
+      if (g && g.count >= 2) return ` <span class="chip dup">${g.count}회 (중복)</span>`;
+      return '';
+    }
+    function lnk(val, attr){ return val ? `<span class="lnk" data-${attr}="${esc(val)}">${esc(val)}</span>` : '<span class="mini">-</span>'; }
+
+    function render(){
+      selected = new Set([...selected].filter(id => people.some(p => p.id === id)));   // 사라진 사람은 선택에서 제거
+      renderStats(); refreshOptionLists();
+      $('btnTrash').textContent = '🗑 휴지통' + (trash.length ? ' (' + trash.length + ')' : '');
+      const list = filteredSorted();
+      const box = $('rows');
+      if (!list.length) { box.innerHTML = `<tr><td colspan="15" class="empty">${people.length ? '조건에 맞는 사람이 없어요.' : '아직 명단이 없어요. 신청이 들어오면 자동으로 쌓이고, “＋ 한 명”으로 직접 추가할 수도 있어요.'}</td></tr>`; syncBulkUI(); return; }
+      box.innerHTML = list.map((p, i) => `
+        <tr data-id="${p.id}" draggable="true">
+          <td class="center"><input type="checkbox" class="chk" data-check="${p.id}"${selected.has(p.id) ? ' checked' : ''}></td>
+          <td class="drag-handle" title="끌어서 순서 바꾸기">⠿</td>
+          <td class="center mini">${i + 1}</td>
+          <td class="name">${esc(p.name) || '<span class="mini">(이름없음)</span>'}${dupChip(p)}</td>
+          <td>${p.phone ? esc(fmtPhone(p.phone)) : '<span class="mini">-</span>'}</td>
+          <td>${p.db_date ? esc(p.db_date) : '<span class="mini">-</span>'}</td>
+          <td>${esc(p.source) || '<span class="mini">-</span>'}</td>
+          <td class="center">${statusSel(p)}</td>
+          <td>${personSel(p, 'consultant')}</td>
+          <td>${personSel(p, 'closer')}</td>
+          <td>${lnk(p.referrer, 'ref')}</td>
+          <td class="prod-cell" title="${esc(p.product)}">${esc(p.product) || '<span class="mini">-</span>'}</td>
+          <td class="memo-cell" data-mid="${p.id}" title="클릭해서 바로 입력">${esc(p.memo) || '<span class="mini">✏️</span>'}</td>
+          <td class="center">${cancelSel(p)}</td>
+          <td class="center" style="white-space:nowrap"><button class="row-btn" data-edit="${p.id}" title="수정">✏️</button><button class="row-btn" data-del-row="${p.id}" title="삭제">🗑</button></td>
+        </tr>`).join('');
+      wireDrag();
+      syncBulkUI();
+    }
+
+    /* 선택 개수·일괄 작업 줄·전체선택 체크박스 상태 갱신 */
+    function syncBulkUI(){
+      $('selCnt').textContent = selected.size;
+      $('bulkBar').classList.toggle('on', selected.size > 0);
+      const list = filteredSorted();
+      $('chkAll').checked = list.length > 0 && list.every(p => selected.has(p.id));
+    }
+
+    ['q', 'fSource', 'fConsultant', 'fCloser', 'fRef', 'fProduct', 'fCancel', 'fSort'].forEach(id => $(id).addEventListener('input', render));
+    $('fStatus').addEventListener('input', () => { statusFilterFromCard = $('fStatus').value; render(); });
+
+    /* 표 안 선택칸 변경 → 즉시 저장 (체크박스는 선택만 갱신) */
+    $('rows').addEventListener('change', e => {
+      const cb = e.target.closest('input[data-check]');
+      if (cb) { if (cb.checked) selected.add(cb.dataset.check); else selected.delete(cb.dataset.check); syncBulkUI(); return; }
+      const sel = e.target.closest('select[data-field]'); if (!sel) return;
+      const v0 = sel.value, pid = sel.dataset.id, field = sel.dataset.field;
+      enqueue(async () => {
+        let v = v0;
+        if (v === '__add') {
+          const nm = prompt('추가할 이름을 적어주세요');
+          if (nm && nm.trim()) { if (await freshNames()) { if (!names.includes(nm.trim())) { names.push(nm.trim()); await saveNames(); } v = nm.trim(); } else { render(); return; } }
+          else { render(); return; }
+        }
+        if (!await freshOrWarn()) { render(); return; }
+        const p = people.find(x => x.id === pid);
+        if (!p) { alert('다른 화면에서 삭제된 사람이라 수정할 수 없어요.'); render(); return; }
+        p[field] = v;
+        render();
+        await savePeople();
+      });
+    });
+
+    /* 드래그로 순서 바꾸기 */
+    let dragId = null;
+    function wireDrag(){
+      document.querySelectorAll('#rows tr[draggable]').forEach(tr => {
+        tr.addEventListener('dragstart', () => { dragId = tr.dataset.id; tr.classList.add('dragging'); });
+        tr.addEventListener('dragend', () => { tr.classList.remove('dragging'); document.querySelectorAll('#rows tr').forEach(t => t.classList.remove('dragover')); });
+        tr.addEventListener('dragover', e => { e.preventDefault(); tr.classList.add('dragover'); });
+        tr.addEventListener('dragleave', () => tr.classList.remove('dragover'));
+        tr.addEventListener('drop', e => {
+          e.preventDefault();
+          const targetId = tr.dataset.id, srcId = dragId;
+          if (!srcId || srcId === targetId) return;
+          enqueue(async () => {
+            if (!await freshOrWarn()) { render(); return; }
+            if ($('fSort').value !== 'manual') {
+              // 최신순·이름순으로 보던 중 드래그하면: 지금 보이는 순서를 "내 순서"로 굳힌 뒤 이동
+              const shown = filteredSorted().map(p => p.id);
+              people = shown.map(sid => people.find(p => p.id === sid)).concat(people.filter(p => !shown.includes(p.id)));
+              $('fSort').value = 'manual';
+            }
+            const from = people.findIndex(p => p.id === srcId);
+            const to = people.findIndex(p => p.id === targetId);
+            if (from < 0 || to < 0) return;
+            const [moved] = people.splice(from, 1);
+            people.splice(to, 0, moved);
+            render();
+            await savePeople();
+          });
+        });
+      });
+    }
+
+    $('rows').addEventListener('click', e => {
+      const eb = e.target.closest('[data-edit]');
+      if (eb) { const p = people.find(x => x.id === eb.dataset.edit); if (p) openEdit(p); return; }
+      const dbtn = e.target.closest('[data-del-row]');
+      if (dbtn) { delPerson(dbtn.dataset.delRow); return; }
+      if (e.target.closest('select') || e.target.closest('input') || e.target.closest('textarea')) return;
+      const mc = e.target.closest('.memo-cell');
+      if (mc && !mc.querySelector('.memo-edit')) { startMemoEdit(mc); return; }
+      const m = e.target.closest('.lnk');
+      if (m) {
+        if (m.dataset.ref != null) $('fRef').value = m.dataset.ref;
+        render(); return;
+      }
+      const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+      const p = people.find(x => x.id === tr.dataset.id); if (p) openEdit(p);
+    });
+
+    /* 메모 칸 클릭 → 그 자리에서 바로 입력 (빈 곳 클릭하거나 Ctrl+Enter로 저장, Esc 취소) */
+    function startMemoEdit(td){
+      const id = td.dataset.mid;
+      const p = people.find(x => x.id === id); if (!p) return;
+      td.innerHTML = '';
+      const ta = document.createElement('textarea');
+      ta.className = 'memo-edit';
+      ta.value = p.memo || '';
+      td.appendChild(ta);
+      ta.focus();
+      let done = false;
+      const finish = save => {
+        if (done) return; done = true;
+        const v = ta.value.trim();
+        if (!save || v === (p.memo || '')) { render(); return; }
+        enqueue(async () => {
+          if (!await freshOrWarn()) { render(); return; }
+          const q = people.find(x => x.id === id);
+          if (q) q.memo = v;
+          render();
+          await savePeople();
+        });
+      };
+      ta.addEventListener('blur', () => finish(true));
+      ta.addEventListener('keydown', ev => {
+        if (ev.key === 'Escape') finish(false);
+        if (ev.key === 'Enter' && ev.ctrlKey) finish(true);
+      });
+    }
+
+    /* ── 일괄 작업 (체크한 사람들 한 번에) ── */
+    $('chkAll').addEventListener('change', () => {
+      const list = filteredSorted();
+      if ($('chkAll').checked) list.forEach(p => selected.add(p.id));
+      else list.forEach(p => selected.delete(p.id));
+      render();
+    });
+    function bulkSet(field, v, after){
+      if (after) after();
+      if (!v || !selected.size) return;
+      const label = { status: '진행상태', consultant: '상담인', closer: '계약자', source: '속성' }[field] || field;
+      if (!confirm(`선택한 ${selected.size}명의 ${label}을(를) "${v}"(으)로 한 번에 바꿀까요?`)) { render(); return; }
+      enqueue(async () => {
+        if (!await freshOrWarn()) { render(); return; }
+        [...selected].forEach(id => { const p = people.find(x => x.id === id); if (p) p[field] = v; });
+        render();
+        await savePeople();
+      });
+    }
+    $('bStatus').addEventListener('change', () => { const v = $('bStatus').value; bulkSet('status', v, () => { $('bStatus').value = ''; }); });
+    $('bConsultant').addEventListener('change', () => { const v = $('bConsultant').value; bulkSet('consultant', v, () => { $('bConsultant').value = ''; }); });
+    $('bCloser').addEventListener('change', () => { const v = $('bCloser').value; bulkSet('closer', v, () => { $('bCloser').value = ''; }); });
+    $('bSourceGo').addEventListener('click', () => {
+      const v = $('bSource').value.trim();
+      if (!v) { alert('입력할 속성을 먼저 적어주세요.'); return; }
+      bulkSet('source', v, () => { $('bSource').value = ''; });
+    });
+    $('bDelete').addEventListener('click', () => {
+      if (!selected.size) return;
+      if (!confirm(`선택한 ${selected.size}명을 휴지통으로 보낼까요?\n(🗑 휴지통에서 언제든 복원할 수 있습니다)`)) return;
+      enqueue(async () => {
+        if (!await freshOrWarn()) { render(); return; }
+        [...selected].forEach(id => {
+          const p = people.find(x => x.id === id); if (!p) return;
+          const ph = normPhone(p.phone);
+          if (ph && !hidden.includes(ph)) hidden.push(ph);
+          else if (!ph && p.name && !hidden.includes('name:' + p.name)) hidden.push('name:' + p.name);
+          trash.unshift(Object.assign({}, p, { deleted_at: today(), deleted_ts: new Date().toISOString() }));
+          people = people.filter(x => x.id !== id);
+        });
+        selected.clear();
+        render();
+        await savePeople();
+      });
+    });
+    $('bCsv').addEventListener('click', () => {
+      if (!selected.size) return;
+      exportCsv(filteredSorted().filter(p => selected.has(p.id)), '재무진단신청자_선택_' + today());
+    });
+    $('bClear').addEventListener('click', () => { selected.clear(); render(); });
+
+    /* ── 개인 추가/편집 ── */
+    const editModal = $('editModal');
+    let editId = null;
+    function nameSelect(el, cur){
+      const opts = [...new Set(names.concat(cur ? [cur] : []))];
+      el.innerHTML = '<option value="">(선택 안 함)</option>' + opts.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('') + '<option value="__add">＋ 이름 추가…</option>';
+    }
+    ['eConsultant', 'eCloser'].forEach(id => $(id).addEventListener('change', async function(){
+      if (this.value !== '__add') return;
+      const nm = prompt('추가할 이름을 적어주세요');
+      if (nm && nm.trim() && await freshNames()) { if (!names.includes(nm.trim())) { names.push(nm.trim()); await saveNames(); } nameSelect(this, nm.trim()); }
+      else this.value = '';
+    }));
+
+    function b64(obj){ return encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(obj))))); }
+    const fmtDT = s => { if (!s) return '-'; const d = new Date(s); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+    function getCslt(){ try { return localStorage.getItem('cslt') || '김병인'; } catch (e) { return '김병인'; } }
+    function curCslt(){
+      const el = document.getElementById('csltName');
+      const v = (el && el.value.trim()) || getCslt();
+      try { if (v) localStorage.setItem('cslt', v); } catch (e) {}
+      return v;
+    }
+
+    /* ── 고객이 재무현황표에 직접 적은 숫자 전체 ──
+       계산기(재무현황계산기.html)의 RAW_IDS 입력칸과 1:1로 맞춘 라벨표.
+       계산기에 입력칸이 늘거나 라벨이 바뀌면 여기도 같이 고쳐야 한다. (형님 지시 2026-08-05)
+       빈칸은 '—'로 그대로 보여준다 — 0원과 "안 적음"은 다른 정보이므로. */
+    const RAW_GROUPS = [
+      { t: '본인 정보', sum: false, f: [['uname', '이름', 'text'], ['_birth', '생년월일', 'text']] },
+      { t: '수입 — 매달 들어오는 돈', f: [
+          ['inc_self', '월급 (본인)'], ['inc_spouse', '월급 (배우자)'], ['inc_bonus', '상여·기타 (월 평균)'],
+          ['inc_int', '이자·배당'], ['inc_rent', '임대·기타']] },
+      { t: '고정지출 — 매달 나가는 돈', f: [
+          ['fx_home', '주거비 (월세·관리비·공과금)'], ['fx_comm', '통신비 & OTT'], ['fx_trans', '교통비 & 유류비'],
+          ['fx_ins', '보험 (보장성 전부)'], ['fx_loan', '대출 원리금 (+할부)'], ['fx_family', '부모님 용돈·가족'],
+          ['fx_self', '자기계발 (운동·공부)'], ['fx_med', '고정 병원비'], ['fx_etc', '기부금·반려동물 등 기타']] },
+      { t: '단기저축 — 매달 (목돈·집을 향해)', f: [
+          ['ss_jeok', '매달 적금'], ['ss_cma', '매달 예금·CMA 적립'], ['ss_stock', '매달 주식 & ETF 적립'], ['ss_coin', '매달 코인 등 기타']] },
+      { t: '장기저축 — 매달 (은퇴 후 소득)', f: [
+          ['ls_pension', '매달 개인연금 (연금저축·IRP·연금보험)'], ['ls_insur', '매달 저축성보험'],
+          ['ls_gongje', '매달 공제회 (교직원·군인공제 등)'], ['ls_chung', '매달 주택청약']] },
+      { t: '단기자산 — 모아둔 돈', f: [
+          ['as_cash', '예·적금 잔액'], ['as_cma', 'CMA·현금'], ['as_stock', '주식·펀드(ETF) 평가액'], ['as_deposit', '전·월세 보증금']] },
+      { t: '장기자산 — 모아둔 돈', f: [
+          ['al_pension', '연금 적립액 (개인+퇴직)'], ['al_estate', '부동산 (시세)'], ['al_estate_type', '부동산 종류', 'text'], ['al_etc', '기타 자산']] },
+      { t: '부채 — 갚아야 할 돈', f: [
+          ['debt_home', '① 주택 관련 대출 (전세·월세·구입자금)'], ['debt_minus', '② 마이너스통장·할부 잔액'], ['debt_credit', '③ 신용·기타 대출 잔액']] },
+      { t: '목표', sum: false, f: [['goal', '올해 저축 목표']] },
+    ];
+    function rawTable(inputs){
+      let filled = 0, total = 0;
+      const html = RAW_GROUPS.map(gr => {
+        let sub = 0;
+        const trs = gr.f.map(([id, label, type]) => {
+          const v = (id === '_birth')
+            ? [inputs.by, inputs.bm, inputs.bd].filter(Boolean).join('.')
+            : inputs[id];
+          total++;
+          const empty = (v === undefined || v === null || String(v).trim() === '');
+          if (!empty) filled++;
+          let disp;
+          if (empty) disp = '<span class="rawnull">—</span>';
+          else if (type === 'text') disp = esc(String(v));
+          else {
+            const n = Number(v);
+            if (isFinite(n)) { if (gr.sum !== false) sub += n; disp = n.toLocaleString('ko-KR') + '<span class="rawu">만원</span>'; }
+            else disp = esc(String(v));
+          }
+          return `<tr><td>${esc(label)}</td><td class="rawv${empty ? ' e' : ''}">${disp}</td></tr>`;
+        }).join('');
+        const sumTag = gr.sum === false ? '' : `<span class="rawsum">합계 ${sub.toLocaleString('ko-KR')}만원</span>`;
+        return `<div class="rawgrp"><div class="rawgt"><span>${esc(gr.t)}</span>${sumTag}</div><table class="rawtb">${trs}</table></div>`;
+      }).join('');
+      return { html, filled, total };
+    }
+    function inputsBlock(g){
+      /* 신청 회차를 하나도 빼지 않고 전부 탭으로 만든다.
+         2026-07-26 이전 신청분은 입력값을 저장하기 전이라 숫자가 없다 — 숨기지 않고 "왜 없는지"를 적어 보여준다.
+         (한 사람이 4번 신청했는데 1번만 숫자가 있는 경우가 실제로 있어서, 회차 수가 어긋나 보이지 않게 함) */
+      const rounds = (g.all && g.all.length ? g.all : (g.lead ? [g.lead] : [])).filter(Boolean);
+      if (!rounds.length) return '';
+      const has = r => !!(r.summary && r.summary.inputs);
+      const withN = rounds.filter(has).length;
+      const multi = rounds.length > 1;
+      const defIdx = Math.max(0, rounds.findIndex(has));   // 숫자가 있는 회차 중 가장 최근 것을 먼저 펼친다
+      const NOINP = '<div class="rawnone">이 회차는 <b>입력값이 저장되기 전(2026-07-26 이전)</b>에 접수되어 고객이 적은 숫자가 남아 있지 않습니다. 위 요약 숫자만 있습니다.</div>';
+      let cnt = '';
+      const pans = rounds.map((r, i) => {
+        let body;
+        if (has(r)) { const t = rawTable(r.summary.inputs); if (i === defIdx) cnt = `${t.total}칸 중 ${t.filled}칸 작성`; body = t.html; }
+        else body = NOINP;
+        return `<div class="rpan${i === defIdx ? ' on' : ''}" data-rd="${i}">${multi ? `<div class="rawwhen">${fmtDT(r.created_at)} 신청분</div>` : ''}${body}</div>`;
+      }).join('');
+      const tabs = multi
+        ? `<div class="rtabs">${rounds.map((r, i) => `<button type="button" class="rtab${i === defIdx ? ' on' : ''}" data-rd="${i}">${i === 0 ? '최근 · ' : ''}${fmtDT(r.created_at)}${has(r) ? '' : ' (숫자없음)'}</button>`).join('')}</div>`
+        : '';
+      const note = withN === 0 ? '상세 숫자 없음 — 입력값 저장 전 접수'
+        : (withN < rounds.length ? `${cnt} · ${rounds.length}회 신청 중 ${withN}회만 숫자 있음`
+          : (multi ? `${cnt} · ${rounds.length}회 신청` : cnt));
+      return `<details class="rawbox"><summary>고객이 적은 숫자 전체 보기 <span class="mini" style="font-weight:400">(${note})</span></summary><div class="rawin">${tabs}${pans}</div></details>`;
+    }
+
+    function diagSection(p){
+      const g = DIAG[normPhone(p.phone)];
+      if (!g) return '';
+      const r = g.lead, s = r.summary || {};
+      const tel = digitsOnly(r.phone || p.phone || '');
+      const nums = [['나이', s['나이'] ? s['나이'] + '세' : null], ['월소득', s['월소득_만원'] != null ? s['월소득_만원'] + '만원' : null],
+        ['월저축', s['월저축_만원'] != null ? s['월저축_만원'] + '만원' : null], ['저축률', s['저축률']],
+        ['월연금', s['월연금_만원'] != null ? s['월연금_만원'] + '만원' : null], ['순자산', s['순자산_만원'] != null ? s['순자산_만원'] + '만원' : null]]
+        .filter(x => x[1] != null && x[1] !== '')
+        .map(x => `<div class="num"><div class="k">${x[0]}</div><div class="v">${x[1]}</div></div>`).join('');
+      const reportBtn = s.inputs
+        ? `<button class="pri" data-report="${r.id}">📄 보고서 보기</button>
+           <button class="sec2" id="pdfBtn" data-pdf="${r.id}">⬇ PDF 받기</button>`
+        : `<button class="sec2" data-norep>📄 보고서 없음</button>`;
+      return `
+        <div class="sec">재무진단 신청 정보 <span class="mini" style="font-weight:400">— ${g.count}회 신청 · 최근 ${fmtDT(r.created_at)}</span></div>
+        ${nums ? `<div class="nums">${nums}</div>` : ''}
+        ${s['자산단계'] ? `<div class="note">자산 단계 — <b>${esc(s['자산단계'])}</b></div>` : ''}
+        ${inputsBlock(g)}
+        <div class="fld" style="margin-top:12px"><label>담당 컨설턴트 <span class="mini">(보고서 표지·인사말에 들어갈 이름)</span></label>
+          <input class="inp" id="csltName" type="text" maxlength="20" value="${esc(p.consultant || getCslt())}"></div>
+        <div class="acts">${reportBtn}${tel ? `<a class="sec2" href="tel:${tel}">📞 전화 걸기</a>` : ''}</div>`;
+    }
+
+    /* 보고서 버튼 (편집창 안) */
+    $('diagInfo').addEventListener('click', e => {
+      /* 회차 탭 전환 (읽기 전용) */
+      const tb = e.target.closest('.rtab');
+      if (tb) {
+        const box = tb.closest('.rawin');
+        box.querySelectorAll('.rtab').forEach(b => b.classList.toggle('on', b === tb));
+        box.querySelectorAll('.rpan').forEach(p => p.classList.toggle('on', p.dataset.rd === tb.dataset.rd));
+        return;
+      }
+      const rep = e.target.closest('[data-report]');
+      if (rep) { openReport(rep.dataset.report); return; }
+      const pdf = e.target.closest('[data-pdf]');
+      if (pdf) { dlPdf(pdf.dataset.pdf); return; }
+      if (e.target.closest('[data-norep]')) alert('이 신청은 입력값이 저장되기 전에 접수되어 보고서를 다시 만들 수 없습니다.\n(2026-07-27 이후 신청분부터 가능합니다)');
+    });
+
+    function openEdit(p){
+      editId = p ? p.id : null;
+      $('editTitle').textContent = p ? ((p.name || '(이름없음)') + ' 정보') : '새 사람 추가';
+      $('eName').value = p ? (p.name || '') : '';
+      $('ePhone').value = p ? (p.phone ? fmtPhone(p.phone) : '') : '';
+      $('eDate').value = p ? (p.db_date || '') : today();
+      fillStatusSelect($('eStatus'), p ? (p.status || '미연락') : '미연락');
+      $('eSource').value = p ? (p.source || '') : '';
+      $('eRef').value = p ? (p.referrer || '') : '';
+      nameSelect($('eConsultant'), p ? (p.consultant || '') : '');
+      nameSelect($('eCloser'), p ? (p.closer || '') : '');
+      $('eProduct').value = p ? (p.product || '') : '';
+      $('eCancel').value = p ? (p.cancel || '') : '';
+      $('eMemo').value = p ? (p.memo || '') : '';
+      $('diagInfo').innerHTML = p ? diagSection(p) : '';
+      $('btnDelPerson').style.display = p ? '' : 'none';
+      editModal.classList.add('open');
+    }
+    function fillStatusSelect(el, cur){ el.innerHTML = STATUSES.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join(''); }
+    $('btnAddOne').addEventListener('click', () => openEdit(null));
+
+    $('btnSavePerson').addEventListener('click', async () => {
+      const name = $('eName').value.trim();
+      if (!name) { alert('이름을 입력하세요.'); return; }
+      const raw = $('ePhone').value.trim();
+      const phone = raw ? (normPhone(raw) || raw) : '';
+      const rec = {
+        name, phone,
+        db_date: $('eDate').value || null,
+        status: $('eStatus').value || '미연락',
+        source: $('eSource').value.trim(),
+        referrer: $('eRef').value.trim(),
+        consultant: $('eConsultant').value === '__add' ? '' : $('eConsultant').value,
+        closer: $('eCloser').value === '__add' ? '' : $('eCloser').value,
+        product: $('eProduct').value.trim(),
+        cancel: $('eCancel').value || '',
+        memo: $('eMemo').value.trim(),
+      };
+      const eid = editId;
+      enqueue(async () => {
+        if (!await freshOrWarn()) return;
+        if (eid) {
+          const p = people.find(x => x.id === eid);
+          if (!p) { alert('다른 화면에서 삭제된 사람이에요. 필요하면 “＋ 한 명”으로 새로 추가해 주세요.'); editModal.classList.remove('open'); render(); return; }
+          Object.assign(p, rec);
+        }
+        else people.unshift(Object.assign({ id: uid() }, rec));
+        editModal.classList.remove('open');
+        render();
+        await savePeople();
+      });
+    });
+    function delPerson(id){ return enqueue(() => delPersonCore(id)); }
+    async function delPersonCore(id){
+      const p0 = people.find(x => x.id === id); if (!p0) return;
+      if (!confirm(`"${p0.name || ''}" 님을 휴지통으로 보낼까요?\n(🗑 휴지통 버튼에서 언제든 복원할 수 있습니다)`)) return;
+      if (!await freshOrWarn()) return;
+      const p = people.find(x => x.id === id);
+      if (!p) { editModal.classList.remove('open'); render(); return; }   // 이미 다른 화면에서 삭제됨
+      const ph = normPhone(p.phone);
+      if (ph && !hidden.includes(ph)) hidden.push(ph);
+      else if (!ph && p.name && !hidden.includes('name:' + p.name)) hidden.push('name:' + p.name);
+      trash.unshift(Object.assign({}, p, { deleted_at: today(), deleted_ts: new Date().toISOString() }));
+      people = people.filter(x => x.id !== id);
+      editModal.classList.remove('open');
+      render();
+      await savePeople();
+    }
+
+    /* ── 휴지통: 복원 / 완전 삭제 ── */
+    $('btnTrash').addEventListener('click', () => { renderTrash(); $('trashModal').classList.add('open'); });
+    function renderTrash(){
+      $('trashList').innerHTML = trash.length ? trash.map(t => `
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #f0f2f5;flex-wrap:wrap">
+          <div style="flex:1;min-width:160px"><b>${esc(t.name) || '(이름없음)'}</b> <span class="mini">${t.phone ? esc(fmtPhone(t.phone)) + ' · ' : ''}삭제일 ${esc(t.deleted_at || '-')}</span></div>
+          <button class="btn btn-ghost" data-restore="${t.id}">↩ 복원</button>
+          <button class="btn danger" data-purge="${t.id}">완전 삭제</button>
+        </div>`).join('') : '<div class="empty">휴지통이 비어 있어요.</div>';
+    }
+    $('trashList').addEventListener('click', e => {
+      const rb = e.target.closest('[data-restore]');
+      const pb = e.target.closest('[data-purge]');
+      if (!rb && !pb) return;
+      const rid = rb && rb.dataset.restore, pid = pb && pb.dataset.purge;
+      if (pb) {
+        const t0 = trash.find(t => t.id === pid);
+        if (!t0 || !confirm(`"${t0.name || ''}" 님을 휴지통에서 완전히 지울까요?\n(명단에 다시 자동으로 들어오지는 않습니다)`)) return;
+      }
+      enqueue(async () => {
+        if (!await freshOrWarn()) { renderTrash(); return; }
+        if (rid) {
+          const i = trash.findIndex(t => t.id === rid); if (i < 0) { renderTrash(); render(); return; }
+          const [t] = trash.splice(i, 1);
+          const ph = normPhone(t.phone);
+          hidden = hidden.filter(h => h !== ph && h !== 'name:' + t.name);
+          delete t.deleted_at;
+          people.unshift(t);
+        } else {
+          const i = trash.findIndex(t => t.id === pid); if (i < 0) { renderTrash(); render(); return; }
+          trash.splice(i, 1);
+        }
+        renderTrash(); render();
+        await savePeople();
+      });
+    });
+    $('btnDelPerson').addEventListener('click', () => { if (editId) delPerson(editId); });
+
+    /* 휴지통 전부 복원 / 비우기 */
+    $('btnRestoreAll').addEventListener('click', () => {
+      if (!trash.length) { alert('휴지통이 비어 있어요.'); return; }
+      if (!confirm(`휴지통의 ${trash.length}명을 전부 명단으로 복원할까요?`)) return;
+      enqueue(async () => {
+        if (!await freshOrWarn()) { renderTrash(); return; }
+        while (trash.length) {
+          const t = trash.shift();
+          const ph = normPhone(t.phone);
+          hidden = hidden.filter(h => h !== ph && h !== 'name:' + t.name);
+          delete t.deleted_at;
+          people.unshift(t);
+        }
+        renderTrash(); render();
+        await savePeople();
+      });
+    });
+    $('btnPurgeAll').addEventListener('click', () => {
+      if (!trash.length) { alert('휴지통이 비어 있어요.'); return; }
+      if (!confirm(`휴지통의 ${trash.length}명을 전부 완전히 지울까요?\n(명단에 다시 자동으로 들어오지는 않습니다)`)) return;
+      enqueue(async () => {
+        if (!await freshOrWarn()) { renderTrash(); return; }
+        trash = [];
+        renderTrash(); render();
+        await savePeople();
+      });
+    });
+
+    /* ── 명단 붙여넣기 ── */
+    const pasteModal = $('pasteModal');
+    $('btnPaste').addEventListener('click', () => {
+      $('pasteText').value = ''; $('pDate').value = today();
+      $('previewWrap').style.display = 'none'; $('btnCommit').style.display = 'none';
+      parsed = null; pasteModal.classList.add('open');
+    });
+    function parsePaste(line){
+      let name = '', contactRaw = '', referrer = '';
+      if (line.includes('\t')) {
+        const c = line.split('\t').map(s => s.trim());
+        name = c[0] || ''; contactRaw = c[1] || ''; referrer = c[2] || '';
+      } else {
+        const parts = line.split(/,|\s{2,}|\s+/).map(s => s.trim()).filter(Boolean);
+        name = parts.find(p => /^[가-힣]{2,6}$/.test(p)) || parts[0] || '';
+        contactRaw = parts.find(p => normPhone(p)) || '';
+      }
+      if (referrer === '없음' || referrer === '-') referrer = '';
+      return { name, phone: contactRaw ? (normPhone(contactRaw) || contactRaw) : '', referrer };
+    }
+    $('btnPreview').addEventListener('click', () => {
+      const lines = $('pasteText').value.split('\n').map(l => l.replace(/\s+$/, '')).filter(l => l.trim());
+      if (!lines.length) { alert('붙여넣은 명단이 없어요.'); return; }
+      const seen = new Set();
+      const rows = lines.map(line => {
+        const r = parsePaste(line); let status = 'ok', reason = '';
+        if (!r.name) { status = 'skip'; reason = '이름 인식 불가'; }
+        const d = normPhone(r.phone);
+        if (d) {
+          if (seen.has(d)) { status = 'skip'; reason = '같은 명단 내 중복'; }
+          else if (people.some(p => normPhone(p.phone) === d)) { status = 'skip'; reason = '이미 명단에 있음'; }
+          seen.add(d);
+        }
+        return { ...r, status, reason };
+      });
+      parsed = rows;
+      const ok = rows.filter(r => r.status === 'ok');
+      $('previewRows').innerHTML = rows.map(r => `<tr class="${r.status === 'skip' ? 'skip' : ''}">
+        <td>${esc(r.name) || '<i>?</i>'}</td>
+        <td>${r.phone ? (normPhone(r.phone) ? esc(fmtPhone(r.phone)) : esc(r.phone)) : '<span class="mini">없음</span>'}</td>
+        <td>${esc(r.referrer) || '<span class="mini">-</span>'}</td>
+        <td>${r.status === 'skip' ? '건너뜀: ' + r.reason : '<span class="tag-new">신규</span>'}</td></tr>`).join('');
+      $('previewSummary').innerHTML = `총 ${rows.length}줄 → <b>신규 ${ok.length}명</b>` + (rows.length - ok.length ? ` · <span style="color:#c0392b">건너뜀 ${rows.length - ok.length}</span>` : '');
+      $('previewWrap').style.display = ''; $('btnCommit').style.display = ok.length ? '' : 'none';
+    });
+    $('btnCommit').addEventListener('click', () => {
+      if (!parsed) return;
+      const okAll = parsed.filter(r => r.status === 'ok');
+      if (!okAll.length) return;
+      const d = $('pDate').value || null;
+      enqueue(async () => {
+        if (!await freshOrWarn()) return;
+        const ok = okAll.filter(r => { const d2 = normPhone(r.phone); return !d2 || !people.some(p => normPhone(p.phone) === d2); });   // 최신본 기준 중복 재확인
+        ok.forEach(r => people.unshift({ id: uid(), name: r.name, phone: normPhone(r.phone) || r.phone || '', db_date: d, source: '', status: '미연락', consultant: '', closer: '', referrer: r.referrer || '', product: '', memo: '', cancel: '' }));
+        pasteModal.classList.remove('open');
+        render();
+        await savePeople();
+        alert(`완료! ${ok.length}명을 명단에 추가했어요.`);
+      });
+    });
+
+    /* ── 상담인·계약자 명단 관리 ── */
+    $('btnNames').addEventListener('click', () => { renderNameChips(); $('namesModal').classList.add('open'); });
+    function renderNameChips(){
+      $('nameChips').innerHTML = names.map(n => `<span class="chip" style="font-size:.85rem;padding:6px 12px;background:#e8f1fd;color:#3f6ad8">${esc(n)} <b style="cursor:pointer;margin-left:4px" data-del="${esc(n)}">×</b></span>`).join('') || '<span class="mini">아직 이름이 없어요.</span>';
+      document.querySelectorAll('#nameChips [data-del]').forEach(b => b.addEventListener('click', async () => {
+        const nm = b.dataset.del;
+        if (!confirm(`"${nm}" 이름을 명단에서 뺄까요? (이미 기입된 칸은 그대로 남습니다)`)) return;
+        if (!await freshNames()) return;
+        names = names.filter(x => x !== nm);
+        await saveNames(); renderNameChips(); render();
+      }));
+    }
+    $('btnAddName').addEventListener('click', async () => {
+      const nm = $('newName').value.trim();
+      if (!nm) return;
+      if (!await freshNames()) return;
+      if (names.includes(nm)) { alert('이미 있는 이름이에요.'); renderNameChips(); return; }
+      names.push(nm); $('newName').value = '';
+      await saveNames(); renderNameChips(); render();
+    });
+
+    /* ── CSV ── */
+    function exportCsv(list, fname){
+      const head = ['번호', '신청자', '연락처', '신청일', '속성', '진행상태', '상담인', '계약자', '추천인', '상품', '메모', '철회/해지', '신청횟수'];
+      const escCsv = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+      const lines = [head.map(escCsv).join(',')];
+      list.forEach((p, i) => { const g = DIAG[normPhone(p.phone)];
+        lines.push([i + 1, p.name || '', p.phone ? fmtPhone(p.phone) : '', p.db_date || '', p.source || '', p.status || '미연락', p.consultant || '', p.closer || '', p.referrer || '', p.product || '', p.memo || '', p.cancel || '', g ? g.count + '회' : ''].map(escCsv).join(',')); });
+      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname + '.csv'; a.click(); URL.revokeObjectURL(a.href);
+    }
+    $('btnExport').addEventListener('click', () => exportCsv(filteredSorted(), '재무진단신청자_' + today()));
+
+    /* ── 보고서 보기 · PDF ── */
+    function openReport(leadId){
+      const r = LEADS.find(x => x.id == leadId); if (!r) return;
+      const inputs = (r.summary || {}).inputs; if (!inputs) return;
+      window.open(`${CALC_URL}#d=${b64(inputs)}&c=${encodeURIComponent(curCslt())}`, '_blank', 'noopener');
+    }
+    async function dlPdf(leadId){
+      const r = LEADS.find(x => x.id == leadId); if (!r) return;
+      const inputs = (r.summary || {}).inputs; if (!inputs) return;
+      const btn = $('pdfBtn'); const org = btn.textContent;
+      btn.disabled = true; btn.textContent = '⏳ 만드는 중...';
+      try {
+        const nm = (r.name || '고객') + '_재무현황보고서';
+        const res = await fetch(PDF_FN, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ d: b64(inputs), filename: nm, c: curCslt() })
+        });
+        if (!res.ok) throw new Error('server ' + res.status);
+        const blob = await res.blob();
+        if (blob.size < 1000) throw new Error('empty');
+        const u = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = u; a.download = nm + '.pdf';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(u), 4000);
+      } catch (e) {
+        alert('PDF를 만들지 못했습니다. "보고서 보기"로 열어서 저장해 주세요.');
+      } finally { btn.disabled = false; btn.textContent = org; }
+    }
+
+    document.querySelectorAll('.modal-bg').forEach(bg => bg.addEventListener('click', e => { if (e.target === bg || e.target.closest('[data-close]')) bg.classList.remove('open'); }));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal-bg.open').forEach(m => m.classList.remove('open')); });
+
+    /* 로그인 칸 없이 바로 불러온다 (2026-08-12, 예전 방식으로 복귀) */
+    loadAll();
+
+    /* 다른 탭·형님 사이트에서 바꾼 내용이 이 화면에도 저절로 반영되게 — 탭으로 돌아올 때 + 1분마다 (편집창 열려 있을 땐 쉼) */
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !document.querySelector('.modal-bg.open') && !document.querySelector('.memo-edit')) loadAll();
+    });
+    setInterval(() => {
+      if (!document.hidden && !document.querySelector('.modal-bg.open') && !document.querySelector('.memo-edit')) loadAll();
+    }, 60000);
+  })();
+  </script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

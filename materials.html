@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>자료실 · 지사 포털</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .folder { background:var(--surface); border:1px solid var(--line); border-radius:12px; margin-bottom:12px; box-shadow:var(--shadow-sm); overflow:hidden; }
+    .folder > summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:10px; padding:14px 18px; font-weight:600; }
+    .folder > summary::-webkit-details-marker { display:none; }
+    .folder > summary .fico { color:var(--brand); display:flex; }
+    .folder > summary .cnt { color:var(--text-mute); font-size:0.82rem; font-weight:500; }
+    .folder > summary .sp { flex:1; }
+    .folder-body { padding:4px 18px 14px; border-top:1px solid var(--line); }
+    .del-btn { background:none; border:none; cursor:pointer; font-size:0.95rem; opacity:0.5; }
+    .del-btn:hover { opacity:1; }
+    .del-btn:disabled { opacity:0.15; cursor:default; }
+    .empty { color:var(--text-mute); font-size:0.86rem; padding:12px 4px; }
+    .addfile { margin-top:8px; }
+  </style>
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="materials"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div>
+          <h1>자료실</h1>
+          <div class="sub">지사 공용 자료</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="panel">
+        <div class="tabs" id="tabs"></div>
+        <div class="panel-body">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:8px 0 14px;">
+            <span style="color:var(--text-soft); font-size:0.88rem;"><span id="catnote"></span> <button class="del-btn" id="renameCat" title="카테고리 이름 변경" style="display:none">✏️</button> <button class="del-btn" id="delCat" title="카테고리 삭제" style="display:none">🗑</button></span>
+            <button class="btn btn-brand" id="addFolder" style="display:none">📁 폴더 추가</button>
+          </div>
+          <div id="folders"><div class="empty">불러오는 중…</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" style="display:none" />
+
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script>
+    const auth = JSON.parse(localStorage.getItem('hwAuth') || 'null');
+    const isBoss = auth && auth.role === 'boss';   // 자료 관리(추가·업로드·삭제)는 지사장만, 다운로드는 누구나
+    let cats = [{ id: 'sales', name: '세일즈자료' }, { id: 'biz', name: '영업자료' }, { id: 'ref', name: '조회자료' }];
+    const catName = id => { const c = cats.find(x => x.id === id); return c ? c.name : id; };
+    let cur = 'sales';
+    let folders = [], files = [];
+    let folderOrder = [];   // 폴더 표시 순서(폴더 id 배열) — app_config.labels에 저장, 모두 공유
+    let uploadTarget = null;
+
+    if (isBoss) { document.getElementById('addFolder').style.display = ''; document.getElementById('renameCat').style.display = ''; document.getElementById('delCat').style.display = ''; }
+
+    const esc = s => String(s == null ? '' : s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const md = d => { const t = new Date(d); return String(t.getMonth()+1).padStart(2,'0') + '.' + String(t.getDate()).padStart(2,'0'); };
+    const FOLDER_ICO = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.6-.8l-.8-1.1A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>';
+    const FILE_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/></svg>';
+
+    function renderTabs() {
+      document.getElementById('tabs').innerHTML = cats
+        .map(c => `<button data-c="${c.id}"${c.id === cur ? ' class="active"' : ''}>${esc(c.name)}</button>`).join('')
+        + (isBoss ? `<button id="addCat" title="카테고리 추가">＋</button>` : '');
+    }
+    async function load() {
+      if (typeof getLabels === 'function') {
+        const L = await getLabels();
+        if (Array.isArray(L.categories) && L.categories.length) cats = L.categories;
+        if (Array.isArray(L.folderOrder)) folderOrder = L.folderOrder.map(String);
+      }
+      if (!cats.find(c => c.id === cur)) cur = cats[0].id;
+      renderTabs();
+      const [f1, f2] = await Promise.all([
+        SB.from('folders').select('*').order('created_at'),
+        SB.from('files').select('*').order('created_at'),
+      ]);
+      folders = f1.data || [];
+      files = f2.data || [];
+      render();
+    }
+
+    // 저장된 순서대로 정렬. 순서에 없는(새/기존) 폴더는 최신이 위로.
+    function sortFolders(arr) {
+      return arr.slice().sort((a, b) => {
+        let ia = folderOrder.indexOf(String(a.id)); if (ia < 0) ia = Infinity;
+        let ib = folderOrder.indexOf(String(b.id)); if (ib < 0) ib = Infinity;
+        if (ia !== ib) return ia - ib;
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+    }
+
+    function render() {
+      const list = sortFolders(folders.filter(f => f.category === cur));
+      document.getElementById('catnote').textContent = `${catName(cur)} · 폴더 ${list.length}개`;
+      const box = document.getElementById('folders');
+      if (!list.length) {
+        box.innerHTML = `<div class="empty">폴더가 없습니다.${isBoss ? ' "📁 폴더 추가"로 만들어 보세요.' : ''}</div>`;
+        return;
+      }
+      box.innerHTML = list.map((fd, i) => {
+        const fls = files.filter(x => String(x.folder_id) === String(fd.id));
+        return `
+        <details class="folder" open>
+          <summary>
+            <span class="fico">${FOLDER_ICO}</span>
+            <span>${esc(fd.name)}</span><span class="cnt">(${fls.length})</span>
+            <span class="sp"></span>
+            ${isBoss ? `<button class="del-btn" data-act="mvup" data-fid="${fd.id}" title="위로"${i === 0 ? ' disabled' : ''}>▲</button>
+            <button class="del-btn" data-act="mvdown" data-fid="${fd.id}" title="아래로"${i === list.length - 1 ? ' disabled' : ''}>▼</button>
+            <button class="del-btn" data-act="renfolder" data-fid="${fd.id}" title="이름 수정">✏️</button>
+            <button class="del-btn" data-act="delfolder" data-fid="${fd.id}" title="폴더 삭제">🗑</button>` : ''}
+          </summary>
+          <div class="folder-body">
+            ${fls.length ? fls.map(file => `
+              <div class="file-row">
+                <span class="fico">${FILE_ICO}</span>
+                <span class="fname">${esc(file.name)}</span>
+                <span class="fmeta">${md(file.created_at)}</span>
+                <a class="dl" href="#" data-act="dl" data-path="${esc(file.path)}">다운로드</a>
+                ${isBoss ? `<button class="del-btn" data-act="delfile" data-fid="${file.id}" data-path="${esc(file.path)}" title="삭제">🗑</button>` : ''}
+              </div>`).join('') : `<div class="empty">파일이 없습니다.</div>`}
+            ${isBoss ? `<button class="btn btn-ghost addfile" data-act="addfile" data-fid="${fd.id}">⬆ 파일 업로드</button>` : ''}
+          </div>
+        </details>`;
+      }).join('');
+    }
+
+    // 탭 전환
+    document.getElementById('tabs').addEventListener('click', async e => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      if (btn.id === 'addCat') {
+        const name = prompt('새 카테고리 이름 (예: 교육자료)');
+        if (!name) return;
+        cats = cats.concat([{ id: 'c' + Date.now(), name }]);
+        if (typeof saveLabels === 'function') await saveLabels({ categories: cats });
+        cur = cats[cats.length - 1].id;
+        renderTabs(); render();
+        return;
+      }
+      if (!btn.dataset.c) return;
+      cur = btn.dataset.c;
+      renderTabs(); render();
+    });
+
+    // 폴더 추가
+    document.getElementById('addFolder').addEventListener('click', async () => {
+      const name = prompt('폴더 이름 (예: 상품별 · 한화손보, 월별 · 2026년 6월)');
+      if (!name) return;
+      const { data, error } = await SB.from('folders').insert({ category: cur, name }).select().single();
+      if (error) { alert('실패: ' + error.message); return; }
+      if (data && data.id != null) {   // 새 폴더는 맨 위로
+        const id = String(data.id);
+        folderOrder = [id].concat(folderOrder.filter(x => x !== id));
+        if (typeof saveLabels === 'function') await saveLabels({ folderOrder });
+      }
+      load();
+    });
+
+    document.getElementById('renameCat').addEventListener('click', async () => {
+      const c = cats.find(x => x.id === cur);
+      const name = prompt('카테고리 이름 변경', c ? c.name : '');
+      if (!name) return;
+      cats = cats.map(x => x.id === cur ? { id: x.id, name } : x);
+      if (typeof saveLabels === 'function') await saveLabels({ categories: cats });
+      renderTabs(); render();
+    });
+
+    document.getElementById('delCat').addEventListener('click', async () => {
+      if (cats.length <= 1) { alert('카테고리는 최소 1개는 있어야 합니다.'); return; }
+      if (!confirm(`"${catName(cur)}" 카테고리를 삭제할까요? (안의 폴더·파일도 삭제됩니다)`)) return;
+      const folderIds = folders.filter(f => f.category === cur).map(f => f.id);
+      const paths = files.filter(x => folderIds.includes(x.folder_id)).map(x => x.path).filter(Boolean);
+      if (paths.length) await SB.storage.from('materials').remove(paths);
+      if (folderIds.length) await SB.from('folders').delete().eq('category', cur);
+      cats = cats.filter(x => x.id !== cur);
+      if (typeof saveLabels === 'function') await saveLabels({ categories: cats });
+      cur = cats[0].id;
+      renderTabs();
+      load();
+    });
+
+    // 파일 선택되면 업로드
+    document.getElementById('fileInput').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file || !uploadTarget) return;
+      const dot = file.name.lastIndexOf('.');
+      const ext = (dot >= 0 ? file.name.slice(dot + 1) : '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'dat';
+      const path = `${uploadTarget}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+      const up = await SB.storage.from('materials').upload(path, file);
+      if (up.error) { alert('업로드 실패: ' + up.error.message); e.target.value = ''; return; }
+      const { error } = await SB.from('files').insert({ folder_id: uploadTarget, name: file.name, path });
+      e.target.value = '';
+      uploadTarget = null;
+      if (error) { alert('기록 실패: ' + error.message); return; }
+      load();
+    });
+
+    // 클릭 처리 (다운로드/추가/삭제/이름수정)
+    document.addEventListener('click', async e => {
+      const t = e.target.closest('[data-act]');
+      if (!t) return;
+      const act = t.dataset.act;
+
+      if (act === 'dl') {
+        e.preventDefault();
+        const { data } = SB.storage.from('materials').getPublicUrl(t.dataset.path);
+        window.open(data.publicUrl, '_blank');
+      } else if (act === 'addfile') {
+        uploadTarget = t.dataset.fid;
+        const fi = document.getElementById('fileInput');
+        fi.value = '';
+        fi.click();
+      } else if (act === 'mvup' || act === 'mvdown') {
+        const list = sortFolders(folders.filter(f => f.category === cur));
+        const idx = list.findIndex(f => String(f.id) === String(t.dataset.fid));
+        if (idx < 0) return;
+        const j = idx + (act === 'mvup' ? -1 : 1);
+        if (j < 0 || j >= list.length) return;
+        const tmp = list[idx]; list[idx] = list[j]; list[j] = tmp;
+        const curIds = list.map(f => String(f.id));
+        const others = sortFolders(folders.filter(f => f.category !== cur)).map(f => String(f.id));
+        folderOrder = curIds.concat(others);
+        if (typeof saveLabels === 'function') await saveLabels({ folderOrder });
+        render();
+      } else if (act === 'renfolder') {
+        const fd = folders.find(f => f.id == t.dataset.fid);
+        const name = prompt('폴더 이름 수정', fd ? fd.name : '');
+        if (!name) return;
+        const { error } = await SB.from('folders').update({ name }).eq('id', t.dataset.fid);
+        if (error) { alert('실패: ' + error.message); return; }
+        load();
+      } else if (act === 'delfolder') {
+        if (!confirm('폴더를 삭제할까요? (안의 파일도 삭제)')) return;
+        const paths = files.filter(x => x.folder_id == t.dataset.fid).map(x => x.path).filter(Boolean);
+        if (paths.length) await SB.storage.from('materials').remove(paths);
+        const { error } = await SB.from('folders').delete().eq('id', t.dataset.fid);
+        if (error) { alert('실패: ' + error.message); return; }
+        load();
+      } else if (act === 'delfile') {
+        if (!confirm('이 파일을 삭제할까요?')) return;
+        if (t.dataset.path) await SB.storage.from('materials').remove([t.dataset.path]);
+        const { error } = await SB.from('files').delete().eq('id', t.dataset.fid);
+        if (error) { alert('실패: ' + error.message); return; }
+        load();
+      }
+    });
+
+    load();
+  </script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

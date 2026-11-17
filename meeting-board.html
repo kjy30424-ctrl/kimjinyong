@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>미팅 보드 · 지사 포털</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* ── 미팅 보드 (2026-09-23 신설, 같은 날 2차 수정) ──
+       스파크플러스 룸 예약 + 코치·매니저 활동 기록. 탭 = 달력(첫 화면) / 집계 / 보드.
+       일정은 달력 날짜 → 「＋ 이 날 일정 추가」 또는 머리의 「＋ 일정 추가」 창으로 등록. 스펙: 팀보드/_스펙.md */
+    .inp { padding:9px 12px; border:1.5px solid var(--line-2); border-radius:10px; font-size:0.88rem; font-family:inherit; outline:none; background:#fff; width:100%; }
+    .inp:focus { border-color:var(--brand); }
+    .inp[readonly] { background:#f5f6f8; color:var(--text-soft); }
+    select.inp { cursor:pointer; }
+    .mini { color:var(--text-mute); font-size:0.8rem; }
+    .empty { color:var(--text-mute); font-size:0.9rem; padding:26px 4px; text-align:center; }
+    .err { display:none; color:var(--neg); font-size:0.82rem; font-weight:600; }
+    .err.show { display:inline; }
+
+    .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0 14px; }
+    .toolbar .grow { flex:1; }
+    .toolbar .inp { width:auto; }
+
+    /* 보드 표 (셀 바로 수정) */
+    .tbl-wrap { overflow-x:auto; }
+    .tbl.board th, .tbl.board td { padding:6px 6px; white-space:nowrap; vertical-align:middle; font-size:0.86rem; }
+    .tbl.board th { position:sticky; top:0; background:#fff; z-index:1; }
+    .tbl.board th.center, .tbl.board td.center { text-align:center; }
+    .cell { width:100%; min-width:70px; padding:7px 8px; border:1px solid transparent; border-radius:8px; background:transparent; font-family:inherit; font-size:0.86rem; color:var(--text); outline:none; }
+    .cell:hover { background:#fafbfc; border-color:var(--line); }
+    .cell:focus { background:#fff; border-color:var(--brand); box-shadow:0 0 0 3px rgba(255,106,0,.12); }
+    .cell.short { min-width:56px; width:74px; }
+    .cell.mid { min-width:96px; width:110px; }
+    .cell.wide { min-width:150px; width:180px; }
+    .cell.date { width:132px; min-width:132px; }
+    .cell.name { font-weight:700; }
+    select.cell { cursor:pointer; appearance:auto; }
+    .tbl.board tr.today td { background:#fff8f2; }
+    .tbl.board tr.past td .cell { color:var(--text-soft); }
+    .del { border:none; background:none; color:var(--text-mute); cursor:pointer; font-size:1rem; padding:4px 7px; border-radius:8px; }
+    .del:hover { background:#fdecea; color:var(--neg); }
+    .pill { font-size:0.76rem; font-weight:700; padding:3px 10px; border-radius:999px; display:inline-block; white-space:nowrap; }
+    .pill.yes { background:var(--pos-sft); color:#15803d; }
+    .pill.no  { background:#eef1f5; color:#7a828f; }
+    .pill.warn { background:#ffd9bf; color:#9a3d00; }
+    .pill.face { background:var(--brand-sft); color:var(--brand-dk); }
+    .pill.remote { background:#eef1f5; color:#5b6472; }
+
+    /* 달력 */
+    .cal-head { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+    .cal-head h2 { font-size:1.05rem; font-weight:800; margin:0 6px; min-width:120px; text-align:center; }
+    .cal-nav { border:1px solid var(--line-2); background:#fff; border-radius:9px; width:32px; height:32px; cursor:pointer; font-size:1rem; font-family:inherit; }
+    .cal-today { border:1px solid var(--line-2); background:#fff; border-radius:9px; padding:0 12px; height:32px; cursor:pointer; font-size:0.82rem; font-weight:600; font-family:inherit; }
+    .cal { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+    .cal .dow { text-align:center; font-size:0.75rem; font-weight:700; color:var(--text-mute); padding:4px 0 6px; }
+    .cal .day { min-height:88px; border:1px solid var(--line); border-radius:10px; padding:6px 7px; background:#fff; cursor:pointer; transition:border-color .12s, background .12s; }
+    .cal .day:hover { border-color:#ffb27a; }
+    .cal .day.other { background:#fafbfc; color:var(--text-mute); }
+    .cal .day.today { border:1.5px solid var(--brand); }
+    .cal .day.sel { background:var(--brand-sft); border-color:var(--brand); box-shadow:0 0 0 3px rgba(255,106,0,.12); }
+    .cal .day .n { font-size:0.8rem; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
+    .cal .day .n .cnt { font-size:0.7rem; background:var(--brand); color:#fff; border-radius:999px; padding:1px 7px; }
+    .cal .chip { font-size:0.72rem; margin-top:4px; padding:2px 6px; border-radius:6px; background:#fff3e6; color:#9a3d00; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cal .chip.more { background:#eef1f5; color:#5b6472; }
+    .daylist { margin-top:18px; }
+    .daylist .day-title { display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+    .daylist .day-title h3 { font-size:0.98rem; font-weight:800; margin:0; }
+    .daylist .day-title .mini { font-weight:600; }
+    .daylist .day-title .btn { margin-left:auto; padding:7px 13px; font-size:0.84rem; }
+    .tbl.day td, .tbl.day th { padding:9px 10px; white-space:nowrap; font-size:0.86rem; }
+    .tbl.day td.wrap { white-space:normal; max-width:240px; color:var(--text-soft); }
+    .tbl.day tbody tr { cursor:pointer; }
+    .t { font-variant-numeric:tabular-nums; font-weight:700; }
+
+    /* 집계 */
+    .wk-head { display:flex; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+    .wk-head h2 { font-size:1rem; font-weight:800; margin:0 4px; min-width:110px; text-align:center; }
+    .sum-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px,1fr)); gap:12px; margin-bottom:18px; }
+    .sum { background:#fff; border:1px solid var(--line); border-radius:var(--radius-sm); padding:13px 15px; }
+    .sum .l { color:var(--text-soft); font-size:0.78rem; font-weight:600; }
+    .sum .v { font-size:1.4rem; font-weight:800; letter-spacing:-.6px; margin-top:2px; font-variant-numeric:tabular-nums; }
+    .sum .v small { font-size:0.8rem; font-weight:600; color:var(--text-soft); letter-spacing:0; margin-left:2px; }
+    .sum.hot { border:1.5px solid var(--brand); background:var(--brand-sft); }
+    .sum.hot .v { color:var(--brand-dk); }
+    .tbl.stat td, .tbl.stat th { padding:10px 12px; white-space:nowrap; }
+    .tbl.stat tr.team td { background:#fff8f2; font-weight:800; }
+    .tbl.stat tr.total td { background:var(--brand-sft); font-weight:800; border-top:2px solid rgba(255,106,0,.4); }
+    .tbl.stat td.coach { padding-left:26px; }
+    .rate { display:inline-flex; align-items:center; gap:8px; }
+    .rate .bar { display:inline-block; width:70px; min-width:70px; flex:none; }
+    .rate .fill { display:block; height:100%; background:var(--brand); border-radius:999px; }
+
+    /* 일정 등록 창 */
+    .modal-bg { display:none; position:fixed; inset:0; background:rgba(16,24,40,.45); z-index:80; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto; }
+    .modal-bg.show { display:flex; }
+    .modal { background:#fff; border-radius:16px; width:100%; max-width:640px; box-shadow:0 20px 60px -20px rgba(0,0,0,.4); }
+    .modal-head { display:flex; justify-content:space-between; align-items:center; padding:18px 22px; border-bottom:1px solid var(--line); }
+    .modal-head h2 { font-size:1.02rem; font-weight:800; }
+    .modal-x { border:none; background:none; font-size:1.3rem; cursor:pointer; color:var(--text-mute); }
+    .modal-body { padding:18px 22px; }
+    .modal-foot { display:flex; justify-content:flex-end; gap:8px; padding:14px 22px; border-top:1px solid var(--line); align-items:center; }
+    .fld { margin-bottom:12px; }
+    .fld label { display:block; font-size:0.78rem; font-weight:700; color:var(--text-soft); margin-bottom:5px; }
+    .g2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .g3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+    .btn.danger { background:#fdecea; color:var(--neg); margin-right:auto; }
+    textarea.inp { min-height:64px; resize:vertical; }
+
+    @media (max-width: 860px) {
+      .cal .day { min-height:64px; padding:4px; }
+      .cal .chip { display:none; }
+      .sum-grid { grid-template-columns:repeat(2,1fr); }
+      .g3 { grid-template-columns:1fr 1fr; }
+    }
+  </style>
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="meeting"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div><h1>미팅 보드</h1><div class="sub">스파크플러스 룸 예약 · 코치 활동 기록</div></div>
+      </div>
+      <button class="btn btn-brand" id="btnAdd">＋ 일정 추가</button>
+    </header>
+
+    <div class="content">
+      <div class="toolbar">
+        <div class="tabs" style="border:none; margin:0; padding:0;">
+          <button data-tab="cal" class="active">달력</button>
+          <button data-tab="stat">집계</button>
+          <button data-tab="board">보드</button>
+        </div>
+        <span class="grow"></span>
+        <span class="err" id="errBox"></span>
+      </div>
+
+      <!-- 탭 1: 달력 (첫 화면) -->
+      <section id="tab-cal">
+        <div class="panel">
+          <div class="panel-body" style="padding-top:18px;">
+            <div class="cal-head">
+              <button class="cal-nav" id="calPrev">‹</button>
+              <h2 id="calTitle"></h2>
+              <button class="cal-nav" id="calNext">›</button>
+              <button class="cal-today" id="calToday">오늘</button>
+            </div>
+            <div class="cal" id="calGrid"></div>
+            <div class="daylist" id="dayList"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 탭 2: 집계 -->
+      <section id="tab-stat" style="display:none;">
+        <div class="panel">
+          <div class="panel-body" style="padding-top:18px;">
+            <div class="wk-head">
+              <div class="seg" id="statSeg">
+                <button data-s="month" class="active">월간</button>
+                <button data-s="all">총(누적)</button>
+              </div>
+              <span id="statNav" style="display:inline-flex; align-items:center; gap:8px;">
+                <button class="cal-nav" id="stPrev">‹</button>
+                <h2 id="stTitle"></h2>
+                <button class="cal-nav" id="stNext">›</button>
+                <button class="cal-today" id="stThis">이번 달</button>
+              </span>
+            </div>
+            <div class="sum-grid" id="statSum"></div>
+            <div class="tbl-wrap">
+              <table class="tbl stat">
+                <thead><tr>
+                  <th>팀 / 코치</th><th class="num">배정 고객</th><th class="num">활동</th><th class="num">대면</th><th class="num">비대면</th>
+                  <th class="num">실제활동</th><th>실제활동률</th>
+                </tr></thead>
+                <tbody id="statBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 탭 3: 보드 -->
+      <section id="tab-board" style="display:none;">
+        <div class="panel">
+          <div class="panel-body">
+            <div class="toolbar" style="margin-top:8px;">
+              <div class="seg" id="rangeSeg">
+                <button data-r="week">이번 주</button>
+                <button data-r="month" class="active">이번 달</button>
+                <button data-r="future">오늘 이후</button>
+                <button data-r="all">전체</button>
+              </div>
+              <select class="inp" id="fManager"><option value="">매니저 전체</option></select>
+              <select class="inp" id="fCoach"><option value="">코치 전체</option></select>
+              <input class="inp grow" id="fSearch" placeholder="검색: 당사자·룸·장소·프로세스·소개">
+              <span class="mini" id="rowCount"></span>
+            </div>
+            <div class="tbl-wrap">
+              <table class="tbl board">
+                <thead><tr>
+                  <th>날짜</th><th>시작</th><th>끝</th><th>당사자</th><th>코치</th><th>매니저</th>
+                  <th>활동/장소</th><th>룸예약</th><th>대면/비대면</th><th class="center">실제활동</th>
+                  <th>프로세스</th><th>소개</th><th>메모</th><th></th>
+                </tr></thead>
+                <tbody id="rows"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 일정 등록·수정 창 -->
+  <div class="modal-bg" id="editModal">
+    <div class="modal">
+      <div class="modal-head"><h2 id="editTitle">일정 추가</h2><button class="modal-x" data-close>×</button></div>
+      <div class="modal-body">
+        <div class="g3">
+          <div class="fld"><label>날짜</label><input class="inp" type="date" id="eDate"></div>
+          <div class="fld"><label>시작 시간</label><input class="inp" id="eStart" list="timeList" placeholder="--:--"></div>
+          <div class="fld"><label>끝 시간</label><input class="inp" id="eEnd" list="timeList" placeholder="--:--"></div>
+        </div>
+        <div class="g3">
+          <div class="fld"><label>당사자</label><input class="inp" id="eCustomer" placeholder="이름 (가운데 글자는 자동으로 가려짐)"></div>
+          <div class="fld"><label>코치</label><select class="inp" id="eCoach"></select></div>
+          <div class="fld"><label>매니저</label><select class="inp" id="eManager"></select></div>
+        </div>
+        <div class="g2">
+          <div class="fld"><label>활동/장소</label><input class="inp" id="eActivity" placeholder="예: 스파크플러스 상담, 줌, 카페"></div>
+          <div class="fld"><label>룸예약</label><input class="inp" id="eRoom" placeholder="스파크플러스 룸 이름"></div>
+        </div>
+        <div class="g2">
+          <div class="fld"><label>대면/비대면</label><select class="inp" id="eMode"><option value="">-</option><option>대면</option><option>비대면</option></select></div>
+          <div class="fld"><label>실제활동</label><select class="inp" id="eMet"><option value="">-</option><option>예</option><option>아니오</option></select></div>
+        </div>
+        <div class="g2">
+          <div class="fld"><label>프로세스</label><input class="inp" id="eProcess" placeholder="직접 입력"></div>
+          <div class="fld"><label>소개</label><input class="inp" id="eReferrer" placeholder="소개해 준 사람 이름"></div>
+        </div>
+        <div class="fld"><label>메모</label><textarea class="inp" id="eMemo"></textarea></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn danger" id="btnDel" style="display:none;">🗑 삭제</button>
+        <button class="btn btn-ghost" data-close>취소</button>
+        <button class="btn btn-brand" id="btnSave">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <datalist id="timeList"></datalist>
+
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script>
+  (function () {
+    const auth = JSON.parse(localStorage.getItem('hwAuth') || 'null');
+    if (!auth) { location.href = 'login.html'; return; }
+
+    /* ── 팀 배정표 (2026-09-23 대표님 원문). 순서 = 같은 시간 겹칠 때 정렬 순서(박효은 → 김동휘 → 김태연) ── */
+    const TEAMS = window.SEOUL_TEAMS;
+    const MANAGERS = Object.keys(TEAMS);
+    const COACH_MGR = {};
+    MANAGERS.forEach(m => TEAMS[m].forEach(c => { COACH_MGR[c] = m; }));
+    const COACHES = MANAGERS.flatMap(m => TEAMS[m]);
+    const TIME_FROM = 8, TIME_TO = 22;   // 30분 단위 선택지 08:00~22:00 (제안값). 직접 입력도 됨.
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const pad = n => String(n).padStart(2, '0');
+    const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const todayStr = ymd(new Date());
+    const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+    const parseDate = s => { const [y, m, d] = String(s || '').split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
+    const fmtDate = s => { if (!s) return ''; const d = parseDate(s); return `${d.getMonth() + 1}/${d.getDate()}(${DOW[d.getDay()]})`; };
+
+    /* 이름 가리기: 가운데 글자를 o로. 김병인→김o인, 2글자 김수→김o, 4글자 남궁민수→남oo수. 가린 이름만 저장한다. */
+    function maskName(s) {
+      s = String(s || '').trim();
+      const ch = Array.from(s);
+      if (ch.length < 2) return s;
+      if (ch.length === 2) return ch[0] + 'o';
+      return ch[0] + 'o'.repeat(ch.length - 2) + ch[ch.length - 1];
+    }
+    const normTime = s => {
+      s = String(s || '').trim().replace(/\s/g, '');
+      if (!s) return '';
+      const m = s.match(/^(\d{1,2})[:시]?(\d{0,2})/);
+      if (!m) return '';
+      const h = Math.min(23, Number(m[1])), mi = Math.min(59, Number(m[2] || 0));
+      return `${pad(h)}:${pad(mi)}`;
+    };
+    const toMin = t => { const m = String(t || '').match(/^(\d{2}):(\d{2})$/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+    const teamRank = r => { const m = r.manager || COACH_MGR[r.coach] || ''; const i = MANAGERS.indexOf(m); return i < 0 ? 99 : i; };
+    // 시간순 → 같은 시간이면 팀 순(박효은·김동휘·김태연) → 코치 이름
+    const sortDay = (a, b) => (a.start_time || '99:99').localeCompare(b.start_time || '99:99') || teamRank(a) - teamRank(b) || String(a.coach || '').localeCompare(String(b.coach || '')) || (a.id - b.id);
+
+    /* ── 저장소: Supabase 표 meeting_board (행 단위). window.__MB_MOCK 이 있으면 화면 미리보기용 가짜 저장소 ── */
+    const TABLE = 'meeting_board';
+    const FIELDS = ['customer', 'coach', 'manager', 'activity', 'room', 'date', 'start_time', 'end_time', 'mode', 'met', 'process', 'referrer', 'memo'];
+    const mock = Array.isArray(window.__MB_MOCK) ? window.__MB_MOCK.map((r, i) => Object.assign({ id: i + 1 }, r)) : null;
+    const mockCust = Array.isArray(window.__MB_MOCK_CUST) ? window.__MB_MOCK_CUST.slice() : null;
+    let mockSeq = mock ? mock.length + 1 : 0;
+    const store = {
+      // 배정 고객(관리자 화면에서 올린 파일) — 집계 탭 「배정 고객」 열에만 쓴다
+      async customers() {
+        if (mock) return mockCust || [];
+        const { data, error } = await SB.from('meeting_customers').select('month,coach,manager');
+        if (error) throw error;
+        return data || [];
+      },
+      async list() {
+        if (mock) return mock.slice();
+        const { data, error } = await SB.from(TABLE).select('*').order('date', { ascending: true }).order('start_time', { ascending: true });
+        if (error) throw error;
+        return data || [];
+      },
+      async insert(rec) {
+        if (mock) { const r = Object.assign({ id: mockSeq++, updated_at: new Date().toISOString() }, rec); mock.push(r); return r; }
+        const { data, error } = await SB.from(TABLE).insert(rec).select().single();
+        if (error) throw error;
+        return data;
+      },
+      async update(id, rec) {
+        if (mock) { const r = mock.find(x => x.id === id); Object.assign(r, rec, { updated_at: new Date().toISOString() }); return r; }
+        const { error } = await SB.from(TABLE).update(Object.assign({}, rec, { updated_at: new Date().toISOString() })).eq('id', id);
+        if (error) throw error;
+      },
+      async remove(id) {
+        if (mock) { const i = mock.findIndex(x => x.id === id); if (i >= 0) mock.splice(i, 1); return; }
+        const { error } = await SB.from(TABLE).delete().eq('id', id);
+        if (error) throw error;
+      },
+    };
+
+    let rows = [];
+    let customers = [];
+    let range = 'month';
+    let calCur = new Date(); calCur.setDate(1);
+    let selDay = todayStr;
+    let statMode = 'month';
+    let statCur = new Date(); statCur.setDate(1);
+    let lastJson = '';
+
+    function mondayOf(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() - wd); return x; }
+    const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+    function showErr(msg) { const e = $('errBox'); if (!msg) { e.className = 'err'; e.textContent = ''; return; } e.textContent = msg; e.className = 'err show'; }
+
+    /* ── 선택지 (코치·매니저는 목록에서 고른다. 자동 배정 없음 — 2026-09-23 대표님 지시) ── */
+    const optHtml = (arr, v) => { const a = v && !arr.includes(v) ? arr.concat([v]) : arr; return `<option value="">-</option>` + a.map(x => `<option value="${esc(x)}" ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join(''); };
+    (function fillLists() {
+      const tl = [];
+      for (let h = TIME_FROM; h <= TIME_TO; h++) { tl.push(`${pad(h)}:00`); if (h < TIME_TO) tl.push(`${pad(h)}:30`); }
+      $('timeList').innerHTML = tl.map(t => `<option value="${t}">`).join('');
+      $('eCoach').innerHTML = optHtml(COACHES, '');
+      $('eManager').innerHTML = optHtml(MANAGERS, '');
+      $('fManager').innerHTML += MANAGERS.map(m => `<option value="${esc(m)}">${esc(m)} 팀</option>`).join('');
+      $('fCoach').innerHTML += COACHES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    })();
+
+    /* ── 탭 ── */
+    function showTab(t) {
+      document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+      ['cal', 'stat', 'board'].forEach(k => { $('tab-' + k).style.display = k === t ? '' : 'none'; });
+      if (t === 'cal') renderCal();
+      if (t === 'stat') renderStat();
+      if (t === 'board') renderBoard();
+      try { history.replaceState(null, '', '#' + t); } catch (e) {}
+    }
+    document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+    function rerenderVisible() {
+      if ($('tab-cal').style.display !== 'none') renderCal();
+      if ($('tab-stat').style.display !== 'none') renderStat();
+      if ($('tab-board').style.display !== 'none') renderBoard();
+    }
+
+    /* ── 일정 등록·수정 창 ── */
+    let editId = null;
+    const modal = $('editModal');
+    const F = { date: 'eDate', start_time: 'eStart', end_time: 'eEnd', customer: 'eCustomer', coach: 'eCoach', manager: 'eManager', activity: 'eActivity', room: 'eRoom', mode: 'eMode', met: 'eMet', process: 'eProcess', referrer: 'eReferrer', memo: 'eMemo' };
+    function openEdit(r, presetDate) {
+      editId = r ? r.id : null;
+      $('editTitle').textContent = r ? '일정 수정' : (presetDate ? `${fmtDate(presetDate)} 일정 추가` : '일정 추가');
+      Object.keys(F).forEach(k => { $(F[k]).value = r ? (r[k] || '') : ''; });
+      if (!r) $('eDate').value = presetDate || todayStr;
+      $('eDate').readOnly = !r && !!presetDate;   // 달력 날짜에서 열면 날짜는 정해진 것 → 시간부터 정한다
+      $('btnDel').style.display = r ? '' : 'none';
+      modal.classList.add('show');
+      setTimeout(() => $(r ? 'eCustomer' : 'eStart').focus(), 30);
+    }
+    function closeEdit() { modal.classList.remove('show'); editId = null; }
+    document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeEdit));
+    modal.addEventListener('click', e => { if (e.target === modal) closeEdit(); });
+    $('eCustomer').addEventListener('blur', () => { $('eCustomer').value = maskName($('eCustomer').value); });
+    ['eStart', 'eEnd'].forEach(id => $(id).addEventListener('blur', () => { $(id).value = normTime($(id).value); }));
+    $('btnAdd').addEventListener('click', () => openEdit(null, $('tab-cal').style.display !== 'none' ? selDay : null));
+    $('btnSave').addEventListener('click', async () => {
+      const rec = {};
+      Object.keys(F).forEach(k => { rec[k] = String($(F[k]).value || '').trim(); });
+      rec.customer = maskName(rec.customer);
+      rec.start_time = normTime(rec.start_time); rec.end_time = normTime(rec.end_time);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(rec.date)) { alert('날짜를 넣어주세요.'); return; }
+      try {
+        showErr('');
+        if (editId == null) { const r = await store.insert(rec); rows.push(r); }
+        else { await store.update(editId, rec); const r = rows.find(x => x.id === editId); if (r) Object.assign(r, rec); }
+        selDay = rec.date; calCur = parseDate(rec.date); calCur.setDate(1);
+        closeEdit(); rerenderVisible();
+      } catch (err) { showErr('저장 실패: ' + (err.message || err)); }
+    });
+    $('btnDel').addEventListener('click', async () => {
+      const r = rows.find(x => x.id === editId); if (!r) return;
+      if (!confirm(`${fmtDate(r.date)} ${r.start_time || ''} ${r.customer || '(이름 없음)'} · ${r.coach || ''} 일정을 지울까요?`)) return;
+      try { showErr(''); await store.remove(r.id); rows = rows.filter(x => x.id !== r.id); closeEdit(); rerenderVisible(); }
+      catch (err) { showErr('삭제 실패: ' + (err.message || err)); }
+    });
+
+    /* ── 달력 ── */
+    function byDay() { const m = {}; rows.forEach(r => { if (!r.date) return; (m[r.date] = m[r.date] || []).push(r); }); Object.values(m).forEach(a => a.sort(sortDay)); return m; }
+    function overlaps(list) {
+      // 같은 룸(빈칸 제외)·시간 겹침 → 해당 행 id 집합. 끝 시간 없으면 시작+30분으로 본다.
+      const bad = new Set();
+      const byRoom = {};
+      list.forEach(r => { const k = String(r.room || '').trim(); if (!k || toMin(r.start_time) == null) return; (byRoom[k] = byRoom[k] || []).push(r); });
+      Object.values(byRoom).forEach(a => {
+        for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) {
+          const s1 = toMin(a[i].start_time), e1 = toMin(a[i].end_time) ?? s1 + 30;
+          const s2 = toMin(a[j].start_time), e2 = toMin(a[j].end_time) ?? s2 + 30;
+          if (s1 < e2 && s2 < e1) { bad.add(a[i].id); bad.add(a[j].id); }
+        }
+      });
+      return bad;
+    }
+    function renderCal() {
+      const y = calCur.getFullYear(), m = calCur.getMonth();
+      $('calTitle').textContent = `${y}년 ${m + 1}월`;
+      const map = byDay();
+      const first = new Date(y, m, 1), start = addDays(first, -first.getDay());
+      let h = DOW.map(d => `<div class="dow">${d}</div>`).join('');
+      for (let i = 0; i < 42; i++) {
+        const d = addDays(start, i), k = ymd(d), list = map[k] || [];
+        const cls = ['day', d.getMonth() !== m ? 'other' : '', k === todayStr ? 'today' : '', k === selDay ? 'sel' : ''].join(' ');
+        h += `<div class="${cls}" data-d="${k}"><div class="n"><span>${d.getDate()}</span>${list.length ? `<span class="cnt">${list.length}</span>` : ''}</div>`
+          + list.slice(0, 3).map(r => `<div class="chip">${esc(r.start_time || '--:--')} ${esc(r.coach || '')}${r.room ? ' · ' + esc(r.room) : ''}</div>`).join('')
+          + (list.length > 3 ? `<div class="chip more">+${list.length - 3}건</div>` : '') + '</div>';
+        if (i === 34 && addDays(start, 35).getMonth() !== m) break;
+      }
+      $('calGrid').innerHTML = h;
+      renderDay(map[selDay] || []);
+    }
+    $('calGrid').addEventListener('click', e => { const el = e.target.closest('.day'); if (!el) return; selDay = el.dataset.d; renderCal(); });
+    function renderDay(list) {
+      const d = parseDate(selDay);
+      const bad = overlaps(list);
+      let h = `<div class="day-title"><h3>${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]})</h3><span class="mini">활동 ${list.length}건${bad.size ? ` · 룸 겹침 ${bad.size}건` : ''}</span><button class="btn btn-ghost" id="btnAddDay">＋ 이 날 일정 추가</button></div>`;
+      if (!list.length) h += '<div class="empty">이 날 적힌 일정이 없습니다.</div>';
+      else {
+        h += `<div class="tbl-wrap"><table class="tbl day"><thead><tr><th>시간</th><th>코치</th><th>매니저</th><th>당사자</th><th>룸</th><th>활동/장소</th><th>대면</th><th>실제활동</th><th>프로세스</th><th>소개</th><th>메모</th></tr></thead><tbody>`;
+        h += list.map(r => `<tr data-id="${r.id}">
+          <td class="t">${esc(r.start_time || '--:--')}${r.end_time ? '~' + esc(r.end_time) : ''}${bad.has(r.id) ? ' <span class="pill warn">룸 겹침</span>' : ''}</td>
+          <td class="name">${esc(r.coach || '')}</td><td>${esc(r.manager || '')}</td><td>${esc(r.customer || '')}</td>
+          <td>${esc(r.room || '')}</td><td class="wrap">${esc(r.activity || '')}</td>
+          <td>${r.mode ? `<span class="pill ${r.mode === '대면' ? 'face' : 'remote'}">${esc(r.mode)}</span>` : ''}</td>
+          <td>${r.met ? `<span class="pill ${r.met === '예' ? 'yes' : 'no'}">${esc(r.met)}</span>` : ''}</td>
+          <td class="wrap">${esc(r.process || '')}</td><td>${esc(r.referrer || '')}</td><td class="wrap">${esc(r.memo || '')}</td></tr>`).join('');
+        h += '</tbody></table></div>';
+      }
+      $('dayList').innerHTML = h;
+    }
+    $('dayList').addEventListener('click', e => {
+      if (e.target.closest('#btnAddDay')) { openEdit(null, selDay); return; }
+      const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+      const r = rows.find(x => x.id === Number(tr.dataset.id)); if (r) openEdit(r);
+    });
+    $('calPrev').addEventListener('click', () => { calCur.setMonth(calCur.getMonth() - 1); renderCal(); });
+    $('calNext').addEventListener('click', () => { calCur.setMonth(calCur.getMonth() + 1); renderCal(); });
+    $('calToday').addEventListener('click', () => { calCur = new Date(); calCur.setDate(1); selDay = todayStr; renderCal(); });
+
+    /* ── 집계: 월간 / 총(누적) 두 페이지 ── */
+    function renderStat() {
+      let list, cust;
+      if (statMode === 'month') {
+        const ym = `${statCur.getFullYear()}-${pad(statCur.getMonth() + 1)}`;
+        $('stTitle').textContent = `${statCur.getFullYear()}년 ${statCur.getMonth() + 1}월`;
+        $('statNav').style.display = 'inline-flex';
+        list = rows.filter(r => String(r.date || '').slice(0, 7) === ym);
+        cust = customers.filter(r => r.month === ym);
+      } else {
+        $('statNav').style.display = 'none';
+        list = rows.slice();
+        cust = customers.slice();
+      }
+      const agg = (c, k) => ({ cust: k.length, n: c.length, face: c.filter(r => r.mode === '대면').length, remote: c.filter(r => r.mode === '비대면').length, met: c.filter(r => r.met === '예').length });
+      const rateHtml = a => a.n ? `<span class="rate"><span class="bar"><span class="fill" style="width:${Math.round(a.met / a.n * 100)}%"></span></span>${Math.round(a.met / a.n * 100)}%</span>` : '<span class="mini">-</span>';
+      const line = (label, a, cls) => `<tr class="${cls || ''}"><td class="${cls ? '' : 'coach'}">${esc(label)}</td><td class="num">${a.cust}</td><td class="num">${a.n}</td><td class="num">${a.face}</td><td class="num">${a.remote}</td><td class="num">${a.met}</td><td>${rateHtml(a)}</td></tr>`;
+      const pick = (arr, f) => arr.filter(f);
+      let h = '';
+      const seen = new Set();
+      MANAGERS.forEach(m => {
+        const inTeam = r => r.manager === m || TEAMS[m].includes(r.coach);
+        h += line(`${m} 팀`, agg(pick(list, inTeam), pick(cust, inTeam)), 'team');
+        TEAMS[m].forEach(c => { seen.add(c); h += line(c, agg(pick(list, r => r.coach === c), pick(cust, r => r.coach === c))); });
+      });
+      const others = [...new Set(list.concat(cust).map(r => r.coach).filter(c => c && !seen.has(c)))];
+      if (others.length) {
+        h += line('기타(배정표에 없는 코치)', agg(pick(list, r => others.includes(r.coach)), pick(cust, r => others.includes(r.coach))), 'team');
+        others.forEach(c => { h += line(c, agg(pick(list, r => r.coach === c), pick(cust, r => r.coach === c))); });
+      }
+      const all = agg(list, cust);
+      h += line('전체', all, 'total');
+      $('statBody').innerHTML = h;
+      const label = statMode === 'month' ? '이번 달' : '총';
+      $('statSum').innerHTML = `
+        <div class="sum"><div class="l">${label} 배정 고객</div><div class="v">${all.cust}<small>명</small></div></div>
+        <div class="sum hot"><div class="l">${label} 활동</div><div class="v">${all.n}<small>건</small></div></div>
+        <div class="sum"><div class="l">${label} 실제활동</div><div class="v">${all.met}<small>건</small></div></div>
+        <div class="sum"><div class="l">대면 / 비대면</div><div class="v">${all.face}<small>/ ${all.remote}</small></div></div>`;
+    }
+    $('statSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      statMode = b.dataset.s; $('statSeg').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b)); renderStat();
+    }));
+    $('stPrev').addEventListener('click', () => { statCur.setMonth(statCur.getMonth() - 1); renderStat(); });
+    $('stNext').addEventListener('click', () => { statCur.setMonth(statCur.getMonth() + 1); renderStat(); });
+    $('stThis').addEventListener('click', () => { statCur = new Date(); statCur.setDate(1); renderStat(); });
+
+    /* ── 보드(표, 셀 바로 수정) ── */
+    function inRange(r) {
+      const d = r.date || '';
+      if (range === 'all') return true;
+      if (range === 'future') return d >= todayStr;
+      if (range === 'week') { const s = ymd(mondayOf(new Date())), e = ymd(addDays(mondayOf(new Date()), 6)); return d >= s && d <= e; }
+      return d.slice(0, 7) === todayStr.slice(0, 7);
+    }
+    function filtered() {
+      const fm = $('fManager').value, fc = $('fCoach').value, q = $('fSearch').value.trim().toLowerCase();
+      return rows.filter(r => inRange(r)
+        && (!fm || r.manager === fm)
+        && (!fc || r.coach === fc)
+        && (!q || [r.customer, r.room, r.activity, r.process, r.referrer, r.memo, r.coach, r.manager].join(' ').toLowerCase().includes(q)))
+        .sort((a, b) => (a.date || '').localeCompare(b.date || '') || sortDay(a, b));
+    }
+    const cellIn = (r, f, cls, extra) => `<input class="cell ${cls || ''}" data-id="${r.id}" data-f="${f}" value="${esc(r[f])}" ${extra || ''}>`;
+    function rowHtml(r) {
+      const cls = r.date === todayStr ? 'today' : (r.date && r.date < todayStr ? 'past' : '');
+      return `<tr class="${cls}" data-id="${r.id}">
+        <td>${cellIn(r, 'date', 'date', 'type="date"')}</td>
+        <td>${cellIn(r, 'start_time', 'short', 'list="timeList" placeholder="-"')}</td>
+        <td>${cellIn(r, 'end_time', 'short', 'list="timeList" placeholder="-"')}</td>
+        <td>${cellIn(r, 'customer', 'mid name', 'placeholder="-"')}</td>
+        <td><select class="cell mid" data-id="${r.id}" data-f="coach">${optHtml(COACHES, r.coach || '')}</select></td>
+        <td><select class="cell mid" data-id="${r.id}" data-f="manager">${optHtml(MANAGERS, r.manager || '')}</select></td>
+        <td>${cellIn(r, 'activity', 'wide', 'placeholder="-"')}</td>
+        <td>${cellIn(r, 'room', 'mid', 'placeholder="-"')}</td>
+        <td><select class="cell short" data-id="${r.id}" data-f="mode">
+          <option value="" ${!r.mode ? 'selected' : ''}>-</option>
+          <option value="대면" ${r.mode === '대면' ? 'selected' : ''}>대면</option>
+          <option value="비대면" ${r.mode === '비대면' ? 'selected' : ''}>비대면</option></select></td>
+        <td class="center"><select class="cell short" data-id="${r.id}" data-f="met">
+          <option value="" ${!r.met ? 'selected' : ''}>-</option>
+          <option value="예" ${r.met === '예' ? 'selected' : ''}>예</option>
+          <option value="아니오" ${r.met === '아니오' ? 'selected' : ''}>아니오</option></select></td>
+        <td>${cellIn(r, 'process', 'wide', 'placeholder="-"')}</td>
+        <td>${cellIn(r, 'referrer', 'mid', 'placeholder="-"')}</td>
+        <td>${cellIn(r, 'memo', 'wide', 'placeholder="-"')}</td>
+        <td><button class="del" data-del="${r.id}" title="이 행 삭제">🗑</button></td>
+      </tr>`;
+    }
+    function renderBoard() {
+      const list = filtered();
+      $('rowCount').textContent = `${list.length}건 / 전체 ${rows.length}건`;
+      $('rows').innerHTML = list.length ? list.map(rowHtml).join('') : `<tr><td colspan="14" class="empty">이 기간에 적힌 일정이 없습니다.</td></tr>`;
+    }
+    $('rangeSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      range = b.dataset.r; $('rangeSeg').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b)); renderBoard();
+    }));
+    ['fManager', 'fCoach'].forEach(id => $(id).addEventListener('change', renderBoard));
+    $('fSearch').addEventListener('input', renderBoard);
+    const pending = {};
+    $('rows').addEventListener('change', e => {
+      const el = e.target; if (!el.dataset || !el.dataset.f) return;
+      const id = Number(el.dataset.id), f = el.dataset.f;
+      const r = rows.find(x => x.id === id); if (!r) return;
+      let v = el.value;
+      if (f === 'customer') { v = maskName(v); el.value = v; }
+      if (f === 'start_time' || f === 'end_time') { v = normTime(v); el.value = v; }
+      r[f] = v;
+      clearTimeout(pending[id]);
+      pending[id] = setTimeout(() => saveRow(r), 400);
+    });
+    $('rows').addEventListener('click', async e => {
+      const b = e.target.closest('[data-del]'); if (!b) return;
+      const id = Number(b.dataset.del); const r = rows.find(x => x.id === id); if (!r) return;
+      if (!confirm(`${fmtDate(r.date)} ${r.start_time || ''} ${r.customer || '(이름 없음)'} · ${r.coach || ''} 행을 지울까요?`)) return;
+      try { showErr(''); await store.remove(id); rows = rows.filter(x => x.id !== id); renderBoard(); }
+      catch (err) { showErr('삭제 실패: ' + (err.message || err)); }
+    });
+    async function saveRow(r) {
+      const rec = {}; FIELDS.forEach(f => { rec[f] = r[f] == null ? '' : r[f]; });
+      rec.customer = maskName(rec.customer);
+      try { showErr(''); await store.update(r.id, rec); }
+      catch (err) { showErr('저장 실패: ' + (err.message || err)); }
+    }
+
+    /* ── 불러오기 + 30초마다 새로고침(셀 수정 중·창 열림 중이면 건너뜀) ── */
+    async function load() {
+      try {
+        const [data, cust] = await Promise.all([store.list(), store.customers()]);
+        const j = JSON.stringify([data, cust]);
+        if (j !== lastJson) { lastJson = j; rows = data; customers = cust; rerenderVisible(); }
+        showErr('');
+      } catch (err) {
+        showErr('불러오기 실패: ' + (err.message || err) + (String(err.message || '').includes('meeting_board') ? ' — Supabase 표(meeting_board)가 아직 없습니다' : ''));
+      }
+    }
+    setInterval(() => {
+      const a = document.activeElement;
+      if (a && a.classList && a.classList.contains('cell')) return;
+      if (modal.classList.contains('show') || document.hidden) return;
+      load();
+    }, 30000);
+
+    const initTab = (location.hash || '#cal').slice(1);
+    showTab(['cal', 'stat', 'board'].includes(initTab) ? initTab : 'cal');
+    load();
+  })();
+  </script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

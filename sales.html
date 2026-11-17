@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>영업 현황 · 지사 포털</title>
+  <link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="sales"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div>
+          <h1>영업 현황</h1>
+          <div class="sub"></div>
+        </div>
+      </div>
+    </header>
+
+    <div class="content"><div class="sales-filters"><label>조회 월<input id="sales-month" type="month"></label><label>조회 지점<select id="sales-filter"><option value="">전체 지점</option></select></label><span>단위: 만원 · 이 브라우저에 저장</span></div><section id="sales-metrics" class="sf-metrics"></section><div class="sf-work-grid"><section class="sf-card"><div class="sf-card-head"><h2 id="sales-form-title">상품 실적 입력</h2></div><form id="sales-form" class="sales-entry"><label>실적일<input id="sale-date" type="date" required></label><label>지점<select id="sale-branch" required></select></label><label>조직원<select id="sale-person" required></select></label><label>상품 이름<input id="sale-product" placeholder="상품명 입력" maxlength="120" required></label><label>월초환산 (만원)<input id="sale-amount" type="number" min="0.01" max="100000000" step="0.01" placeholder="예: 25.5" required></label><div style="align-self:end"><button class="sf-primary" type="submit">저장</button><button type="button" id="sale-cancel" hidden>수정 취소</button></div></form><div class="sales-note" id="sales-message" role="status">월초환산 금액을 직접 입력하세요. 수수료 계산기 자료와는 별도 집계됩니다.</div></section><section class="sf-card"><div class="sf-card-head"><h2>지점별 월초환산</h2></div><div id="sales-ranking" class="sales-ranking"></div></section></div><section class="sf-card" style="margin-top:24px"><div class="sf-card-head"><h2>상품별 영업 내역</h2><button id="sale-undo" hidden>삭제 되돌리기</button></div><div class="sales-table-wrap"><table class="sales-table"><thead><tr><th>실적일</th><th>지점</th><th>조직원</th><th>상품 이름</th><th class="num">월초환산 (만원)</th><th>관리</th></tr></thead><tbody id="sales-records"></tbody></table></div></section><details class="sales-legacy"><summary>기존 수수료 계산기 연동 실적 보기</summary>
+      <div class="stat-grid" id="summary"></div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>코치별 월초성적</h2><span style="color:var(--text-mute);font-size:0.82rem;">단위: 만원</span></div>
+        <div class="panel-body"><div class="chart" id="chart"></div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>코치별 상세</h2><span style="color:var(--text-mute);font-size:0.82rem;" id="cnt"></span></div>
+        <div class="panel-body" style="overflow-x:auto;">
+          <table class="tbl">
+            <thead><tr><th style="width:48px">순위</th><th>코치</th><th class="num">월초성적</th><th class="num">익월수수료</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </details></div>
+  </div>
+
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script src="commission-core.js"></script>
+  <script>
+    (async () => {
+    await HW.load();
+    const fmt = HW.fmt;
+    const r = HW.compute();
+
+    const sellers = r.ppl.filter(p => p.sales);
+    const fcs = r.ppl.filter(p => p.role === 'fc');
+    const topFC = fcs.slice().sort((a,b) => b.ownIk - a.ownIk)[0];          // 1등 기준 = 익월수수료
+    const crownIdx = (topFC && topFC.ownIk > 0) ? topFC.idx : -1;
+    const branchHwan = sellers.reduce((s,p) => s + p.hwan, 0);
+    const branchOwnIk = sellers.reduce((s,p) => s + p.ownIk, 0); // 익월수수료 합계
+    const active = sellers.filter(p => p.hwan > 0).length;
+    const avg = sellers.length ? branchHwan / sellers.length : 0;
+    const crown = idx => idx === crownIdx ? ' 👑' : '';
+
+    const shown = sellers.filter(p => p.role !== 'boss');        // 화면 표시용 — 지점장(본인) 개인 항목은 숨김(합계엔 포함)
+    const ranked = shown.slice().sort((a,b) => b.ownIk - a.ownIk);   // 순위 = 익월수수료 기준
+    const byHwan = shown.slice().sort((a,b) => b.hwan - a.hwan);
+    const maxHwan = Math.max(300, ...shown.map(p => p.hwan));   // 막대 기준 최대값 = 300만원 고정(2026-09-11 대표님 지시). 300 넘는 사람이 나오면 그 값으로 자동 확장
+
+    document.getElementById('summary').innerHTML = `
+      <div class="stat"><div class="badge-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg></div><div class="label">지사 월초성적</div><div class="value">${fmt(branchHwan)}<small> 만원</small></div></div>
+      <div class="stat"><div class="badge-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div><div class="label">가동 코치</div><div class="value">${active}<small> / ${sellers.length}명</small></div></div>
+      <div class="stat"><div class="badge-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg></div><div class="label">인당 평균 월초성적</div><div class="value">${fmt(avg)}<small> 만원</small></div></div>
+      <div class="stat" style="border:1.5px solid var(--brand);"><div class="badge-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M5 5H3v1a3 3 0 0 0 3 3M19 5h2v1a3 3 0 0 1-3 3"/></svg></div><div class="label" style="color:var(--brand-dk); font-weight:700;">🏆 이달의 1등</div><div class="value">${topFC && topFC.ownIk > 0 ? topFC.name : '집계 전'}</div><div class="delta up">${topFC && topFC.ownIk > 0 ? '익월 ' + fmt(topFC.ownIk) + '만' : '데이터 없음'}</div></div>`;
+
+    document.getElementById('chart').innerHTML = byHwan.map(p =>
+      `<div class="col"><div class="barwrap"><div class="barv${p.idx===crownIdx?' current':''}" style="height:${Math.max(2, p.hwan/maxHwan*100)}%"><div class="amt">${fmt(p.hwan)}</div></div></div><div class="cap">${p.name}${crown(p.idx)}</div></div>`).join('');
+
+    document.getElementById('cnt').textContent = `총 ${sellers.length}명 · 순위는 익월수수료 기준`;
+    document.getElementById('rows').innerHTML = ranked.map((p,i) => {
+      return `<tr><td><span class="rank${i<3?' top':''}">${i+1}</span></td><td class="name">${p.name}${crown(p.idx)}</td>
+        <td class="num">${fmt(p.hwan)}만원</td><td class="num">${fmt(p.ownIk)}만원</td></tr>`;
+    }).join('') +
+      `<tr class="total-row"><td></td><td>지사 합계</td><td class="num">${fmt(branchHwan)}만원</td><td class="num">${fmt(branchOwnIk)}만원</td></tr>`;
+    })();
+  </script>
+<script src="sales-ledger.js"></script><script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

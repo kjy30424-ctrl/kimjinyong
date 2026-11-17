@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>주요 공지 · 지사 포털</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .del-btn { background: none; border: none; cursor: pointer; font-size: 0.95rem; opacity: 0.5; }
+    .del-btn:hover { opacity: 1; }
+    .writebox { background: var(--surface); border: 1px solid var(--brand); border-radius: 14px; padding: 18px 20px; margin-bottom: 22px; box-shadow: var(--shadow-sm); display: none; }
+    .writebox.on { display: block; }
+    .writebox input.ttl, .writebox textarea { width: 100%; border: 1.5px solid var(--line-2); border-radius: 10px; padding: 11px 13px; font-size: 0.95rem; font-family: inherit; margin-bottom: 10px; }
+    .writebox textarea { min-height: 110px; resize: vertical; }
+    .writebox input:focus, .writebox textarea:focus { outline: none; border-color: var(--brand); }
+    .writebox .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .note-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 14px; box-shadow: var(--shadow-sm); }
+    .note-card .nh { display: flex; align-items: center; gap: 8px; }
+    .note-card .nt { font-weight: 700; font-size: 1.02rem; flex: 1; }
+    .note-card .nmeta { color: var(--text-mute); font-size: 0.8rem; white-space: nowrap; }
+    .note-card .nb { color: var(--text); font-size: 0.92rem; margin-top: 8px; white-space: pre-wrap; line-height: 1.6; }
+    .note-card .pin { color: var(--brand); display: inline-flex; }
+    .att { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .att img { max-width: 100%; border-radius: 10px; border: 1px solid var(--line); }
+    .att a { color: var(--brand-dk); font-weight: 600; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 6px; }
+    .badge-new { background: var(--brand); color: #fff; font-size: 0.66rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+  </style>
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="notices"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div>
+          <h1>주요 공지</h1>
+          <div class="sub">지사장 전달사항</div>
+        </div>
+      </div>
+      <button class="btn btn-brand" id="writeBtn" style="display:none">✏️ 공지 작성</button>
+    </header>
+
+    <div class="content">
+      <div class="writebox" id="writebox">
+        <input class="ttl" id="wTitle" placeholder="제목" />
+        <textarea id="wBody" placeholder="내용을 입력하세요"></textarea>
+        <div class="row">
+          <input type="file" id="wFiles" multiple />
+          <label style="display:flex; align-items:center; gap:6px; font-size:0.88rem;"><input type="checkbox" id="wPin"> 상단 고정</label>
+          <span style="flex:1"></span>
+          <button class="btn btn-ghost" id="cancelBtn">취소</button>
+          <button class="btn btn-brand" id="postBtn">등록</button>
+        </div>
+        <div style="color:var(--text-mute); font-size:0.78rem; margin-top:8px;">사진(jpg·png 등)은 공지에 바로 보이고, 그 외 파일은 다운로드 링크로 들어가요.</div>
+      </div>
+
+      <div id="noticeList"><div style="padding:16px; color:var(--text-mute);">불러오는 중…</div></div>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script>
+    const auth = JSON.parse(localStorage.getItem('hwAuth') || 'null');
+    const isBoss = auth && auth.role === 'boss';
+    const writeBtn = document.getElementById('writeBtn');
+    const writebox = document.getElementById('writebox');
+    if (isBoss) writeBtn.style.display = '';
+
+    const esc = s => String(s == null ? '' : s).replace(/</g, '&lt;');
+    const md = d => { const t = new Date(d); return String(t.getMonth()+1).padStart(2,'0') + '.' + String(t.getDate()).padStart(2,'0'); };
+    const PIN = '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M9 4v6l-2 4v1h10v-1l-2-4V4z"/><path d="M11 15h2v5h-2z"/></svg>';
+    const isImg = name => /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name || '');
+
+    function attHtml(atts) {
+      if (!atts || !atts.length) return '';
+      return '<div class="att">' + atts.map(a => {
+        const { data } = SB.storage.from('materials').getPublicUrl(a.path);
+        const url = data.publicUrl;
+        if (isImg(a.name)) return `<img src="${url}" alt="${esc(a.name)}">`;
+        return `<a href="${url}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>`;
+      }).join('') + '</div>';
+    }
+
+    async function load() {
+      const box = document.getElementById('noticeList');
+      const { data, error } = await SB.from('notices').select('*')
+        .order('pinned', { ascending: false }).order('created_at', { ascending: false });
+      if (error) { box.innerHTML = `<div style="padding:16px; color:var(--neg);">불러오기 실패: ${esc(error.message)}</div>`; return; }
+      if (!data.length) { box.innerHTML = `<div style="padding:16px; color:var(--text-mute);">아직 공지가 없습니다.${isBoss ? ' "✏️ 공지 작성"으로 올려보세요.' : ''}</div>`; return; }
+      box.innerHTML = data.map(n => `
+        <div class="note-card">
+          <div class="nh">
+            ${n.pinned ? `<span class="pin">${PIN}</span>` : ''}
+            <span class="nt">${esc(n.title)}</span>
+            <span class="nmeta">지사장 · ${md(n.created_at)}</span>
+            ${isBoss ? `<button class="del-btn" data-id="${n.id}" title="삭제">🗑</button>` : ''}
+          </div>
+          ${n.body ? `<div class="nb">${esc(n.body)}</div>` : ''}
+          ${attHtml(n.attachments)}
+        </div>`).join('');
+    }
+
+    if (writeBtn) writeBtn.addEventListener('click', () => writebox.classList.toggle('on'));
+    document.getElementById('cancelBtn').addEventListener('click', () => {
+      writebox.classList.remove('on');
+      document.getElementById('wTitle').value = '';
+      document.getElementById('wBody').value = '';
+      document.getElementById('wFiles').value = '';
+      document.getElementById('wPin').checked = false;
+    });
+
+    document.getElementById('postBtn').addEventListener('click', async () => {
+      const title = document.getElementById('wTitle').value.trim();
+      if (!title) { alert('제목을 입력하세요.'); return; }
+      const body = document.getElementById('wBody').value.trim();
+      const pinned = document.getElementById('wPin').checked;
+      const fileList = document.getElementById('wFiles').files;
+      const postBtn = document.getElementById('postBtn');
+      postBtn.disabled = true; postBtn.textContent = '올리는 중…';
+      try {
+        const attachments = [];
+        for (const file of fileList) {
+          const dot = file.name.lastIndexOf('.');
+          const ext = (dot >= 0 ? file.name.slice(dot + 1) : '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'dat';
+          const path = `notices/${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+          const up = await SB.storage.from('materials').upload(path, file);
+          if (up.error) { alert('파일 업로드 실패: ' + up.error.message); continue; }
+          attachments.push({ name: file.name, path });
+        }
+        const { error } = await SB.from('notices').insert({ title, body, pinned, attachments });
+        if (error) { alert('등록 실패: ' + error.message); return; }
+        document.getElementById('cancelBtn').click();
+        load();
+      } finally {
+        postBtn.disabled = false; postBtn.textContent = '등록';
+      }
+    });
+
+    document.addEventListener('click', async e => {
+      const b = e.target.closest('.del-btn[data-id]');
+      if (!b) return;
+      if (!confirm('이 공지를 삭제할까요?')) return;
+      const { error } = await SB.from('notices').delete().eq('id', b.dataset.id);
+      if (error) { alert('삭제 실패: ' + error.message); return; }
+      load();
+    });
+
+    load();
+  </script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

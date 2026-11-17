@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>세일즈 심화 교육 · 지사 포털</title>
+  <link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="lecture"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div>
+          <h1>세일즈 심화 교육</h1>
+          <div class="sub">주제별 영상 · 파일 · 글</div>
+        </div>
+      </div>
+      <button class="btn btn-brand" id="addFolder" style="display:none">📁 주제 추가</button>
+    </header>
+
+    <div class="content">
+      <div id="folders"><div class="empty">불러오는 중…</div></div>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" style="display:none" />
+  <script>window.EDU = { key: 'lecture' };</script>
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script src="edu.js"></script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

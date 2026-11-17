@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>설정 · 지사 포털</title>
+  <script>
+    // 지사장 전용
+    (function () {
+      var a = null;
+      try { a = JSON.parse(localStorage.getItem('hwAuth') || 'null'); } catch (e) {}
+      if (!a) { location.href = 'login.html'; }
+      else if (a.role !== 'boss') { location.href = 'index.html'; }
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .ti { width: 100%; max-width: 360px; padding: 11px 13px; border: 1.5px solid var(--line-2); border-radius: 10px; font-size: 0.95rem; font-family: inherit; }
+    .ti:focus { outline: none; border-color: var(--brand); }
+    .frow { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); }
+    .frow:last-child { border-bottom: none; }
+    .frow .lbl { width: 130px; font-weight: 600; font-size: 0.9rem; }
+    .frow input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--brand); }
+    .field { margin-bottom: 16px; }
+    .field > label { display: block; font-weight: 600; font-size: 0.88rem; margin-bottom: 6px; }
+    .del-btn { background: none; border: none; cursor: pointer; font-size: 0.95rem; opacity: 0.5; }
+    .del-btn:hover { opacity: 1; }
+    .crow { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+    .crow .cl { flex: 1; font-weight: 600; }
+    .crow .cu { color: var(--text-soft); font-size: 0.82rem; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  </style>
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="settings"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div>
+          <h1>설정</h1>
+          <div class="sub">지사 이름·메뉴 관리 (지사장 전용 · 현재 브라우저에 반영)</div>
+        </div>
+      </div>
+      <button class="btn btn-brand" id="saveBtn">💾 저장</button>
+    </header>
+
+    <div class="content">
+      <div class="panel">
+        <div class="panel-head"><h2>지사 정보</h2></div>
+        <div class="panel-body">
+          <div class="field"><label>지사 이름</label><input class="ti" id="bName" placeholder="서울금융지사"></div>
+          <div class="field"><label>부제 (작은 글씨)</label><input class="ti" id="bSub" placeholder="업무 포털"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>로그인 계정 · 비밀번호</h2><span style="color:var(--text-mute);font-size:0.82rem;">비밀번호는 암호화되어 별도 계정 연결 후 관리돼요</span></div>
+        <div class="panel-body">
+          <div id="acctList"></div>
+          <div class="field" style="margin-top:16px">
+            <label>내(관리자) 비밀번호 변경</label>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <input class="ti" id="myNewPw" type="password" style="max-width:240px" placeholder="새 비밀번호 (6자 이상)">
+              <button class="btn btn-brand" id="savePwBtn">🔑 내 비밀번호 변경</button>
+            </div>
+          </div>
+          <div style="color:var(--text-soft); font-size:0.85rem; margin-top:10px; line-height:1.7;">
+            다른 계정(지점원·신입원 등)의 비밀번호는 Supabase 대시보드
+            <b>Authentication &gt; Users</b>에서 해당 계정을 눌러 재설정해요.
+            (보안을 위해 화면에서 남의 비밀번호를 바꾸거나 볼 수 없게 바꿨어요)
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>메뉴 이름 · 표시</h2><span style="color:var(--text-mute);font-size:0.82rem;">체크 해제하면 숨겨져요</span></div>
+        <div class="panel-body" id="menuList"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>연계 사이트</h2></div>
+        <div class="panel-body">
+          <div style="color:var(--text-soft); font-size:0.9rem;">외부 사이트 링크는 이제 사이드바 <b>"연계 사이트"</b> 메뉴에서 직접 추가·삭제해요.</div>
+          <a class='btn btn-ghost' href='/linked-sites' style='margin-top:12px; display:inline-block;'>연계 사이트 열기 →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script>
+    const MENU = [
+      ['dashboard', '대시보드'], ['linked', '연계 사이트'],
+      ['sales', '영업 현황'], ['statement', '개인 명세'], ['notices', '주요 공지'], ['materials', '자료실'],
+      ['rookie_notices', '신입 주요 공지'], ['rookie_guide', '신입 위촉 가이드'], ['rookie_docs', '신입 위촉 자료 안내'],
+      ['edu_common', '지식 공통 교육'], ['edu_sales', '세일즈 신입 교육'], ['lecture', '세일즈 심화 교육'],
+      ['commission', '수수료 계산기'], ['snapshots', '실적 보관함'], ['settings', '설정'],
+    ];
+    let menuCfg = {};
+    let custom = [];
+    const esc = s => String(s == null ? '' : s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+    function renderMenu() {
+      document.getElementById('menuList').innerHTML = MENU.map(([key, def]) => {
+        const c = menuCfg[key] || {};
+        return `<div class="frow">
+          <input type="checkbox" id="show_${key}" ${c.hidden ? '' : 'checked'}>
+          <span class="lbl">${def}</span>
+          <input class="ti" id="lbl_${key}" style="max-width:240px" value="${esc(c.label || '')}" placeholder="${def}">
+        </div>`;
+      }).join('');
+    }
+    // 로그인 계정 목록 (읽기 전용 — 비밀번호는 서버에 암호화 보관되어 표시 불가)
+    const ACCOUNT_INFO = [{name:'지사장 미리보기',id:'ChatGPT',role:'boss'}];
+    function renderAccounts() {
+      document.getElementById('acctList').innerHTML = ACCOUNT_INFO.map(a => `
+        <div class="frow">
+          <span class="lbl">${esc(a.name)}</span>
+          <span style="width:100px;color:var(--text-soft);font-size:0.86rem">${esc(a.id)}</span>
+          <span style="color:var(--text-mute);font-size:0.8rem">${HW_ROLE_LABEL[a.role]}</span>
+        </div>`).join('');
+    }
+    document.getElementById('savePwBtn').addEventListener('click', async () => {
+      const pw = document.getElementById('myNewPw').value.trim();
+      if (pw.length < 6) { alert('비밀번호는 6자 이상으로 해주세요.'); return; }
+      const { error } = await SB.auth.updateUser({ password: pw });
+      if (error) { alert('변경 실패: ' + error.message); return; }
+      document.getElementById('myNewPw').value = '';
+      alert('내 비밀번호가 변경됐어요! 다음 로그인부터 적용돼요.');
+    });
+
+    async function init() {
+      if (typeof getLabels === 'function') {
+        const L = await getLabels();
+        document.getElementById('bName').value = L.branchName || '';
+        document.getElementById('bSub').value = L.branchSub || '';
+      }
+      try {
+        const { data } = await SB.from('app_config').select('value').eq('key', 'sidebar').maybeSingle();
+        if (data && data.value) { menuCfg = data.value.menu || {}; custom = Array.isArray(data.value.custom) ? data.value.custom : []; }
+      } catch (e) {}
+      renderMenu();
+      renderAccounts();
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+      const newMenu = {};
+      MENU.forEach(([key]) => {
+        const hidden = !document.getElementById('show_' + key).checked;
+        const label = document.getElementById('lbl_' + key).value.trim();
+        const o = {};
+        if (hidden) o.hidden = true;
+        if (label) o.label = label;
+        newMenu[key] = o;
+      });
+      const branchName = document.getElementById('bName').value.trim();
+      const branchSub = document.getElementById('bSub').value.trim();
+      try {
+        if (typeof saveLabels === 'function') await saveLabels({ branchName: branchName || '서울금융지사', branchSub: branchSub || '업무 포털' });
+        await SB.from('app_config').upsert({ key: 'sidebar', value: { menu: newMenu, custom }, updated_at: new Date().toISOString() });
+        alert('저장됐습니다! 사이드바에 바로 반영돼요.');
+        location.reload();
+      } catch (e) { alert('저장 실패: ' + e.message); }
+    });
+
+    init();
+  </script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

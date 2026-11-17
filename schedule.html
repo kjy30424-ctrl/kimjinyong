@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>일정 관리 · 지사 포털</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* ── 일정 관리 (2026-09-19 신설) ──
+       위 = 다가오는 일정 D-day 표, 아래 = 월 달력. 인사이트 메모 달력과 같은 뼈대를 쓴다.
+       색은 오렌지 계열 + 명암만 (색약 배려). */
+    .inp { padding:10px 13px; border:1.5px solid var(--line-2); border-radius:10px; font-size:0.9rem; font-family:inherit; outline:none; background:#fff; }
+    .inp:focus { border-color:var(--brand); }
+    select.inp { cursor:pointer; }
+    .mini { color:var(--text-mute); font-size:0.8rem; }
+    .empty { color:var(--text-mute); font-size:0.9rem; padding:26px 4px; text-align:center; }
+
+    /* 요약 띠 */
+    .sum-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:18px; }
+    .sum { background:#fff; border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px 16px; }
+    .sum .l { color:var(--text-soft); font-size:0.8rem; font-weight:600; }
+    .sum .v { font-size:1.5rem; font-weight:800; letter-spacing:-.8px; margin-top:3px; font-variant-numeric:tabular-nums; }
+    .sum .v small { font-size:0.85rem; font-weight:600; color:var(--text-soft); letter-spacing:0; margin-left:2px; }
+    .sum.hot { border:1.5px solid var(--brand); background:var(--brand-sft); }
+    .sum.hot .v { color:var(--brand-dk); }
+
+    /* D-day 표 */
+    .tbl-wrap { overflow-x:auto; }
+    .tbl td, .tbl th { padding:11px 12px; white-space:nowrap; vertical-align:middle; }
+    .tbl tbody tr { cursor:pointer; }
+    .tbl td.memo-cell { white-space:normal; max-width:260px; color:var(--text-soft); font-size:0.84rem; line-height:1.5; }
+    .tbl tr.past td { color:var(--text-mute); }
+    .tbl tr.past .dday { background:#eef1f5; color:#7a828f; }
+    .dday { display:inline-block; min-width:64px; text-align:center; font-weight:800; font-size:0.82rem; padding:4px 10px; border-radius:999px; font-variant-numeric:tabular-nums; }
+    .dday.d0  { background:var(--brand); color:#fff; }                 /* 오늘 */
+    .dday.d3  { background:#ffd9bf; color:#9a3d00; }                   /* 1~3일 */
+    .dday.d7  { background:var(--brand-sft); color:var(--brand-dk); border:1px solid #ffd2b3; } /* 4~7일 */
+    .dday.d14 { background:#fff8f2; color:#b35309; border:1px solid #f5dcc6; }   /* 8~14일 */
+    .dday.far { background:#f3f4f6; color:#5b6472; }                   /* 15일~ */
+    .ev-title { font-weight:700; }
+    .owner-chip { font-size:0.76rem; font-weight:700; padding:3px 10px; border-radius:999px; background:var(--brand-sft); color:var(--brand-dk); }
+    .alarm { font-size:0.74rem; color:var(--text-mute); letter-spacing:.2px; font-variant-numeric:tabular-nums; }
+    .alarm b { color:var(--brand-dk); font-weight:800; }
+    .alarm .off { color:#b8bec8; }
+    .tbl-foot { display:flex; align-items:center; gap:10px; margin-top:10px; }
+    .tbl-foot label { display:flex; align-items:center; gap:6px; font-size:0.84rem; color:var(--text-soft); cursor:pointer; }
+    .tbl-foot input { accent-color:var(--brand); }
+
+    /* 달력 */
+    .cal-head { display:flex; align-items:center; justify-content:center; gap:14px; margin:6px 0 12px; }
+    .cal-head h2 { font-size:1.05rem; font-weight:800; letter-spacing:-.3px; min-width:130px; text-align:center; }
+    .cal-nav { border:1.5px solid var(--line-2); background:#fff; border-radius:9px; width:32px; height:32px; cursor:pointer; font-size:1rem; color:var(--text-soft); font-family:inherit; }
+    .cal-nav:hover { border-color:var(--brand); color:var(--brand-dk); }
+    .cal-today { border:1.5px solid var(--line-2); background:#fff; border-radius:9px; padding:0 10px; height:32px; cursor:pointer; font-size:0.8rem; font-weight:700; color:var(--text-soft); font-family:inherit; }
+    .cal-today:hover { border-color:var(--brand); color:var(--brand-dk); }
+    .cal { display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; }
+    .cal .dow { text-align:center; font-size:0.76rem; font-weight:700; color:var(--text-mute); padding:4px 0; }
+    .cal .dow.sun, .cal .day.sun .num { color:#c0392b; }
+    .cal .day { border:1px solid var(--line); border-radius:11px; min-height:84px; padding:6px 7px; background:#fff; cursor:pointer; display:flex; flex-direction:column; gap:3px; overflow:hidden; }
+    .cal .day:hover { border-color:var(--brand); }
+    .cal .day.out { background:#fafbfc; color:var(--text-mute); }
+    .cal .day.out .num { color:var(--text-mute); }
+    .cal .day .num { font-size:0.78rem; font-weight:700; }
+    .cal .day.today .num { color:#fff; background:var(--brand); border-radius:999px; width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; }
+    .cal .day .ev { font-size:0.7rem; font-weight:700; background:var(--brand-sft); color:var(--brand-dk); border-radius:6px; padding:1px 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .cal .day .ev.past { background:#f1f3f6; color:#8a929e; }
+    .cal .day .ev:hover { background:#ffd9bf; }
+    .cal .day .more { font-size:0.68rem; color:var(--text-mute); }
+    .cal-hint { margin-top:10px; }
+
+    /* 모달 */
+    .modal-bg { display:none; position:fixed; inset:0; background:rgba(16,24,40,.45); z-index:80; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto; }
+    .modal-bg.open { display:flex; }
+    .modal { background:#fff; border-radius:18px; box-shadow:0 24px 60px -12px rgba(16,24,40,.4); width:100%; max-width:560px; }
+    .modal-head { padding:20px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+    .modal-head h2 { font-size:1.1rem; font-weight:800; letter-spacing:-.4px; }
+    .modal-x { background:none; border:none; font-size:1.4rem; line-height:1; cursor:pointer; color:var(--text-mute); padding:2px 6px; }
+    .modal-x:hover { color:var(--text); }
+    .modal-body { padding:20px 24px; }
+    .modal-foot { padding:16px 24px; border-top:1px solid var(--line); display:flex; gap:10px; justify-content:flex-end; align-items:center; }
+    .fld { margin-bottom:14px; }
+    .fld > label { display:block; font-size:0.82rem; font-weight:700; margin-bottom:6px; color:var(--text-soft); }
+    .fld .inp, .fld textarea { width:100%; }
+    .fld textarea { padding:11px 13px; border:1.5px solid var(--line-2); border-radius:10px; font-size:0.9rem; font-family:inherit; resize:vertical; min-height:90px; outline:none; line-height:1.6; }
+    .fld textarea:focus { border-color:var(--brand); }
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .checkline { display:flex; align-items:center; gap:9px; font-size:0.9rem; font-weight:600; cursor:pointer; padding:5px 0; }
+    .checkline input { width:18px; height:18px; accent-color:var(--brand); }
+    .alarm-box { background:#fafbfc; border:1px solid var(--line); border-radius:10px; padding:10px 14px; }
+    .alarm-box .mini { display:block; margin-top:4px; }
+    .danger { background:#fff; color:var(--neg); border:1px solid #f3c7c2; }
+    .danger:hover { background:#fdecea; }
+
+    @media (max-width: 760px) {
+      .sum-grid { grid-template-columns:repeat(2, 1fr); }
+      .cal .day { min-height:64px; padding:4px 5px; }
+      .row2 { grid-template-columns:1fr; }
+    }
+  </style>
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="schedule"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div><h1>일정 관리</h1><div class="sub">주요 이벤트 D-day와 월간 달력 · 2주 전·1주 전·3일 전·당일 아침 알림</div></div>
+      </div>
+      <button class="btn btn-brand" id="btnAdd">＋ 일정 추가</button>
+    </header>
+
+    <div class="content">
+      <!-- 요약 띠 -->
+      <div class="sum-grid" id="sumGrid"></div>
+
+      <!-- D-day 표 -->
+      <div class="panel">
+        <div class="panel-head"><h2>다가오는 일정</h2><span class="mini" id="tblCount"></span></div>
+        <div class="panel-body">
+          <div class="tbl-wrap">
+            <table class="tbl" id="tbl">
+              <thead><tr>
+                <th>이벤트명</th><th>날짜</th><th>D-day</th><th>담당</th><th>메모</th><th>알림</th>
+              </tr></thead>
+              <tbody id="tblBody"></tbody>
+            </table>
+          </div>
+          <div class="tbl-foot">
+            <label><input type="checkbox" id="showPast"> 지난 일정도 보기</label>
+            <span class="mini">알림 칸: 14·7·3·D 순서, 진한 글씨 = 이미 보냄</span>
+            <span style="margin-left:auto; display:flex; gap:6px;">
+              <button class="btn btn-ghost" id="btnAlertDry" style="padding:6px 11px; font-size:0.8rem;" title="오늘 아침 기준으로 보낼 대상만 계산합니다(발송 없음)">알림 미리보기</button>
+              <button class="btn btn-ghost" id="btnAlertNow" style="padding:6px 11px; font-size:0.8rem;" title="오늘 보낼 알림을 지금 텔레그램·카톡으로 실제 보냅니다">지금 알림 보내기</button>
+            </span>
+          </div>
+          <pre class="mini" id="alertOut" style="display:none; white-space:pre-wrap; background:#fafbfc; border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin-top:10px; line-height:1.6;"></pre>
+        </div>
+      </div>
+
+      <!-- 달력 -->
+      <div class="panel" style="margin-top:18px;">
+        <div class="panel-body">
+          <div class="cal-head">
+            <button class="cal-nav" id="calPrev">‹</button>
+            <h2 id="calTitle"></h2>
+            <button class="cal-nav" id="calNext">›</button>
+            <button class="cal-today" id="calToday">오늘</button>
+          </div>
+          <div class="cal" id="cal"></div>
+          <div class="mini cal-hint">빈 칸을 누르면 그 날짜로 일정을 추가하고, 일정을 누르면 고칠 수 있습니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 추가/수정 모달 -->
+  <div class="modal-bg" id="editModal">
+    <div class="modal">
+      <div class="modal-head"><h2 id="editTitle">일정 추가</h2><button class="modal-x" data-close>×</button></div>
+      <div class="modal-body">
+        <div class="fld"><label>이벤트명</label><input class="inp" id="eTitle" placeholder="예: 9월 마감, 팀장 워크숍, 세미나"></div>
+        <div class="row2">
+          <div class="fld"><label>날짜</label><input class="inp" type="date" id="eDate"></div>
+          <div class="fld"><label>담당 <span class="mini">(조직도에서 고르거나 직접 입력)</span></label><input class="inp" id="eOwner" list="ownerList" placeholder="예: 김병인"><datalist id="ownerList"></datalist></div>
+        </div>
+        <div class="fld"><label>메모</label><textarea id="eMemo" placeholder="준비할 것, 장소, 참고 사항"></textarea></div>
+        <div class="alarm-box">
+          <label class="checkline"><input type="checkbox" id="eTg" checked> 텔레그램 알림</label>
+          <label class="checkline"><input type="checkbox" id="eKakao" checked> 카카오톡 알림</label>
+          <span class="mini">2주 전 · 1주 전 · 3일 전 · 당일 아침 08:00에 보냅니다. 이미 2주 안쪽 날짜면 저장 다음 날 아침에 한 번 먼저 옵니다.</span>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn danger" id="btnDel" style="margin-right:auto;">🗑 삭제</button>
+        <button class="btn btn-ghost" data-close>취소</button>
+        <button class="btn btn-brand" id="btnSave">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+  
+  <script src="sb.js"></script>
+  <script>
+  (function () {
+    /* 접근: 관리자(대표님) + 한채혁 지점장(hcw, 2026-09-23). 더 열 때는 여기 + sidebar.js 메뉴 + schedule-data.js ALLOWED_PERSONS 세 곳을 같이 바꾼다. */
+    const auth = JSON.parse(localStorage.getItem('hwAuth') || 'null');
+    const ALLOWED_PERSONS = ['hcw'];
+    const canAccess = auth && (auth.role === 'boss' || ALLOWED_PERSONS.includes(auth.personId));
+    if (!canAccess) { alert('접근 권한이 없습니다.'); location.href = 'index.html'; return; }
+
+    const MOCK = Array.isArray(window.__MOCK_SCHEDULES);
+    let items = [];
+    let orgPeople = [];
+    let editId = null;
+    let calY, calM;
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+    const pad = n => String(n).padStart(2, '0');
+    const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    function todayStr() { return ymd(window.__MOCK_TODAY ? new Date(window.__MOCK_TODAY) : new Date()); }
+    // 날짜 차이(일) — 시간·시차 영향 없이 날짜 문자열끼리만 계산
+    function daysLeft(dateStr) {
+      const a = new Date(dateStr + 'T00:00:00'), b = new Date(todayStr() + 'T00:00:00');
+      return Math.round((a - b) / 86400000);
+    }
+    function fmtDate(ds) { const d = new Date(ds + 'T00:00:00'); return `${d.getMonth() + 1}/${d.getDate()}(${DOW[d.getDay()]})`; }
+    function ddayHtml(n) {
+      if (n < 0) return `<span class="dday">D+${-n}</span>`;
+      const cls = n === 0 ? 'd0' : n <= 3 ? 'd3' : n <= 7 ? 'd7' : n <= 14 ? 'd14' : 'far';
+      return `<span class="dday ${cls}">${n === 0 ? 'D-day' : 'D-' + n}</span>`;
+    }
+    { const t = new Date(todayStr() + 'T00:00:00'); calY = t.getFullYear(); calM = t.getMonth(); }
+
+    /* ---- 창구(schedule-data) 호출: 포털 로그인 증표를 같이 보낸다 ---- */
+    async function apiCall(action, payload) {
+      let token = '';
+      try { const { data } = await SB.auth.getSession(); token = (data && data.session && data.session.access_token) || ''; } catch (e) {}
+      const r = await fetch('/.netlify/functions/schedule-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify(Object.assign({ action }, payload || {})),
+      });
+      let j = {};
+      try { j = await r.json(); } catch (e) {}
+      if (!r.ok) throw new Error(j.error || ('요청 실패 HTTP ' + r.status));
+      return j;
+    }
+
+    /* ---- 데이터 ---- */
+    async function loadOrg() {
+      const DEFAULT = { head: { name: '김병인', role: '지점장' }, cmo: { name: '한채혁(채미)', role: 'CMO' }, managers: [], influencers: [], coaches: [] };
+      let org = DEFAULT;
+      try {
+        const { data } = await SB.from('app_config').select('value').eq('key', 'org').maybeSingle();
+        if (data && data.value) org = Object.assign({}, DEFAULT, data.value);
+      } catch (e) {}
+      orgPeople = [];
+      if (org.head && org.head.name) orgPeople.push(org.head.name);
+      if (org.cmo && org.cmo.name) orgPeople.push(org.cmo.name);
+      ['managers', 'influencers', 'coaches'].forEach(k => (org[k] || []).forEach(n => orgPeople.push(n)));
+      $('ownerList').innerHTML = orgPeople.map(n => `<option value="${esc(n)}">`).join('');
+    }
+    async function load() {
+      if (MOCK) { items = window.__MOCK_SCHEDULES.slice(); render(); return; }
+      try {
+        const j = await apiCall('load');
+        items = (j.value && Array.isArray(j.value.items)) ? j.value.items : [];
+        render();
+      } catch (e) {
+        $('tblBody').innerHTML = `<tr><td colspan="6" class="empty">⚠ 일정을 못 불러왔어요. ${esc(e.message)}</td></tr>`;
+      }
+    }
+    async function saveAll() {
+      if (MOCK) { alert('미리보기 모드예요 — 실제 저장은 배포 후에 됩니다.'); return true; }
+      await apiCall('save', { value: { items, updated_at: new Date().toISOString() } });
+      return true;
+    }
+    // 저장·삭제 직전에 서버 최신값을 다시 읽는다 — 화면을 오래 열어 둔 사이 아침 알림이 "보낸 기록"을
+    // 바꿔 놓았을 수 있어서, 옛 값으로 덮어쓰지 않게 한다.
+    async function refreshBeforeWrite() {
+      if (MOCK) return;
+      const j = await apiCall('load');
+      items = (j.value && Array.isArray(j.value.items)) ? j.value.items : [];
+    }
+
+    /* ---- 요약 띠 ---- */
+    function renderSummary() {
+      const t = todayStr();
+      const up = items.filter(x => x.date >= t).sort((a, b) => a.date < b.date ? -1 : 1);
+      const next = up[0];
+      const in7 = up.filter(x => daysLeft(x.date) <= 7).length;
+      const in30 = up.filter(x => daysLeft(x.date) <= 30).length;
+      const monthKey = t.slice(0, 7);
+      const thisMonth = items.filter(x => (x.date || '').slice(0, 7) === monthKey).length;
+      $('sumGrid').innerHTML = `
+        <div class="sum hot"><div class="l">다음 일정</div><div class="v" style="font-size:1.1rem; line-height:1.35;">${next ? `${esc(next.title)}<small>${fmtDate(next.date)} · ${daysLeft(next.date) === 0 ? 'D-day' : 'D-' + daysLeft(next.date)}</small>` : '없음'}</div></div>
+        <div class="sum"><div class="l">7일 안</div><div class="v">${in7}<small>건</small></div></div>
+        <div class="sum"><div class="l">30일 안</div><div class="v">${in30}<small>건</small></div></div>
+        <div class="sum"><div class="l">이번 달 전체</div><div class="v">${thisMonth}<small>건</small></div></div>`;
+    }
+
+    /* ---- D-day 표 ---- */
+    function alarmHtml(x) {
+      const on = x.notify || {};
+      if (!on.tg && !on.kakao) return '<span class="alarm off">알림 끔</span>';
+      const sent = x.sent || {};
+      const cell = k => sent[k] ? `<b>${k.replace('d', '') || 'D'}</b>` : `<span>${k.replace('d', '')}</span>`;
+      const marks = ['d14', 'd7', 'd3'].map(cell).join('·') + '·' + (sent.d0 ? '<b>D</b>' : '<span>D</span>');
+      const ch = (on.tg ? '텔' : '') + (on.tg && on.kakao ? '·' : '') + (on.kakao ? '카' : '');
+      return `<span class="alarm">${ch} ${marks}</span>`;
+    }
+    function renderTable() {
+      const t = todayStr();
+      const showPast = $('showPast').checked;
+      let list = items.slice().sort((a, b) => a.date === b.date ? String(a.title).localeCompare(String(b.title)) : (a.date < b.date ? -1 : 1));
+      if (!showPast) list = list.filter(x => x.date >= t);
+      $('tblCount').textContent = list.length ? `${list.length}건` : '';
+      if (!list.length) { $('tblBody').innerHTML = `<tr><td colspan="6" class="empty">${items.length ? '다가오는 일정이 없어요.' : '아직 일정이 없어요. “＋ 일정 추가”로 시작해 보세요.'}</td></tr>`; return; }
+      $('tblBody').innerHTML = list.map(x => {
+        const n = daysLeft(x.date);
+        return `<tr data-id="${esc(x.id)}" class="${n < 0 ? 'past' : ''}">
+          <td class="ev-title">${esc(x.title)}</td>
+          <td>${esc(x.date)} <span class="mini">${DOW[new Date(x.date + 'T00:00:00').getDay()]}</span></td>
+          <td>${ddayHtml(n)}</td>
+          <td>${x.owner ? `<span class="owner-chip">${esc(x.owner)}</span>` : '<span class="mini">—</span>'}</td>
+          <td class="memo-cell">${esc(x.memo)}</td>
+          <td>${alarmHtml(x)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    /* ---- 달력 ---- */
+    function renderCal() {
+      const byDate = {};
+      items.forEach(x => { if (x.date) (byDate[x.date] = byDate[x.date] || []).push(x); });
+      $('calTitle').textContent = `${calY}년 ${calM + 1}월`;
+      const first = new Date(calY, calM, 1);
+      const start = new Date(first); start.setDate(1 - first.getDay());
+      const tod = todayStr();
+      const cells = DOW.map((d, i) => `<div class="dow${i === 0 ? ' sun' : ''}">${d}</div>`);
+      for (let i = 0; i < 42; i++) {
+        const d = new Date(start); d.setDate(start.getDate() + i);
+        const ds = ymd(d);
+        const out = d.getMonth() !== calM;
+        const evs = (byDate[ds] || []).slice().sort((a, b) => String(a.title).localeCompare(String(b.title)));
+        const chips = evs.slice(0, 3).map(x => `<span class="ev${ds < tod ? ' past' : ''}" data-ev="${esc(x.id)}" title="${esc(x.title)}">${esc(x.title)}</span>`).join('');
+        const more = evs.length > 3 ? `<span class="more">+${evs.length - 3}</span>` : '';
+        cells.push(`<div class="day${out ? ' out' : ''}${ds === tod ? ' today' : ''}${d.getDay() === 0 ? ' sun' : ''}" data-date="${ds}"><span class="num">${d.getDate()}</span>${chips}${more}</div>`);
+      }
+      $('cal').innerHTML = cells.join('');
+    }
+
+    function render() { renderSummary(); renderTable(); renderCal(); }
+
+    $('showPast').addEventListener('change', renderTable);
+    $('calPrev').addEventListener('click', () => { calM--; if (calM < 0) { calM = 11; calY--; } renderCal(); });
+    $('calNext').addEventListener('click', () => { calM++; if (calM > 11) { calM = 0; calY++; } renderCal(); });
+    $('calToday').addEventListener('click', () => { const t = new Date(todayStr() + 'T00:00:00'); calY = t.getFullYear(); calM = t.getMonth(); renderCal(); });
+    $('cal').addEventListener('click', e => {
+      const chip = e.target.closest('[data-ev]');
+      if (chip) { const x = items.find(i => String(i.id) === chip.dataset.ev); if (x) openEdit(x); return; }
+      const day = e.target.closest('.day');
+      if (day) openEdit(null, day.dataset.date);
+    });
+    $('tblBody').addEventListener('click', e => {
+      const tr = e.target.closest('tr[data-id]');
+      if (!tr) return;
+      const x = items.find(i => String(i.id) === tr.dataset.id);
+      if (x) openEdit(x);
+    });
+    $('btnAdd').addEventListener('click', () => openEdit(null, todayStr()));
+
+    /* ---- 추가/수정 ---- */
+    const modal = $('editModal');
+    function openEdit(x, presetDate) {
+      editId = x ? x.id : null;
+      $('editTitle').textContent = x ? '일정 수정' : '일정 추가';
+      $('eTitle').value = x ? (x.title || '') : '';
+      $('eDate').value = x ? (x.date || todayStr()) : (presetDate || todayStr());
+      $('eOwner').value = x ? (x.owner || '') : '';
+      $('eMemo').value = x ? (x.memo || '') : '';
+      $('eTg').checked = x ? !!(x.notify && x.notify.tg) : true;
+      $('eKakao').checked = x ? !!(x.notify && x.notify.kakao) : true;
+      $('btnDel').style.display = x ? '' : 'none';
+      modal.classList.add('open');
+      setTimeout(() => $('eTitle').focus(), 50);
+    }
+    $('btnSave').addEventListener('click', async () => {
+      const title = $('eTitle').value.trim();
+      const date = $('eDate').value;
+      if (!title) { alert('이벤트명을 적어주세요.'); return; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert('날짜를 골라주세요.'); return; }
+      const rec = { title, date, owner: $('eOwner').value.trim(), memo: $('eMemo').value.trim(), notify: { tg: $('eTg').checked, kakao: $('eKakao').checked } };
+      $('btnSave').disabled = true; $('btnSave').textContent = '저장 중…';
+      const backup = JSON.stringify(items);
+      try {
+        await refreshBeforeWrite();
+        if (editId != null) {
+          const i = items.findIndex(x => String(x.id) === String(editId));
+          if (i >= 0) {
+            const prev = items[i];
+            // 날짜가 바뀌면 보낸 알림 기록을 지워 새 날짜 기준으로 다시 보낸다
+            const sent = prev.date === date ? (prev.sent || {}) : {};
+            items[i] = Object.assign({}, prev, rec, { sent, updated_at: new Date().toISOString() });
+          }
+        } else {
+          items.push(Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sent: {}, created_at: new Date().toISOString() }, rec));
+        }
+        await saveAll();
+        modal.classList.remove('open');
+        { const d = new Date(date + 'T00:00:00'); calY = d.getFullYear(); calM = d.getMonth(); }
+        render();
+      } catch (e) {
+        items = JSON.parse(backup);
+        alert('저장 실패: ' + e.message);
+      } finally {
+        $('btnSave').disabled = false; $('btnSave').textContent = '저장';
+      }
+    });
+    $('btnDel').addEventListener('click', async () => {
+      if (editId == null) return;
+      if (!confirm('이 일정을 삭제할까요?')) return;
+      const backup = JSON.stringify(items);
+      try {
+        await refreshBeforeWrite();
+        items = items.filter(x => String(x.id) !== String(editId));
+        await saveAll();
+        modal.classList.remove('open');
+        render();
+      } catch (e) { items = JSON.parse(backup); alert('삭제 실패: ' + e.message); }
+    });
+    modal.addEventListener('click', e => { if (e.target === modal || e.target.closest('[data-close]')) modal.classList.remove('open'); });
+
+    /* ---- 알림 시험 (배포 후 검증용: 미리보기 = 발송 없음, 지금 보내기 = 실제 발송 + 보낸 표시) ---- */
+    async function runAlerts(dry) {
+      if (MOCK) { alert('미리보기 모드예요 — 배포 후에 됩니다.'); return; }
+      if (!dry && !confirm('오늘 보낼 알림을 지금 텔레그램·카톡으로 실제 보낼까요? (보낸 단계는 다시 안 보냅니다)')) return;
+      const out = $('alertOut');
+      out.style.display = ''; out.textContent = '계산 중…';
+      try {
+        const r = await apiCall('alerts', { dry });
+        const lines = [`기준일 ${r.today} · 전체 ${r.total}건 · 보낼 대상 ${r.hits.length}건${dry ? ' (발송 안 함)' : ''}`];
+        r.hits.forEach(h => lines.push(`  · ${h.title} — ${h.date} (${h.days === 0 ? 'D-day' : 'D-' + h.days}) 단계 ${h.due.join('/')}`));
+        if (r.telegramText) lines.push('', '[텔레그램 본문]', r.telegramText);
+        if (r.kakaoTexts && r.kakaoTexts.length) r.kakaoTexts.forEach((k, i) => lines.push('', `[카톡 ${i + 1} · ${k.length}자]`, k));
+        if (!dry) {
+          lines.push('', `텔레그램: ${r.telegram ? (r.telegram.ok ? '도착(ok)' : '실패 ' + r.telegram.detail) : '대상 없음'}`);
+          (r.kakao || []).forEach(k => lines.push(`카톡 ${k.title}: ${k.ok ? '도착(ok)' : '실패 ' + k.detail}`));
+        }
+        out.textContent = lines.join('\n');
+        if (!dry) await load();
+      } catch (e) { out.textContent = '실패: ' + e.message; }
+    }
+    $('btnAlertDry').addEventListener('click', () => runAlerts(true));
+    $('btnAlertNow').addEventListener('click', () => runAlerts(false));
+
+    loadOrg().then(load);
+  })();
+  </script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>

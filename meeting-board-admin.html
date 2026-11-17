@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script src="organization-data.js"></script><script src="seed-data.js"></script><script src="preview-runtime.js"></script><link rel="stylesheet" href="preview.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>미팅 보드(관리자) · 지사 포털</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* ── 미팅 보드(관리자) (2026-09-23 신설) ──
+       매니저가 배정 고객 파일(xlsx·csv)을 올리면 → 어느 열이 고객 이름·코치인지 고르고 → 이름을 가려 meeting_customers 표에 저장.
+       코치별 배정 고객 수(월간·총) + 활동·실제활동·실제활동률. 보는 사람 = 관리자(boss)·지점장(jijeom)·매니저(team). 스펙: 팀보드/_스펙.md §6 */
+    .inp { padding:9px 12px; border:1.5px solid var(--line-2); border-radius:10px; font-size:0.88rem; font-family:inherit; outline:none; background:#fff; }
+    .inp:focus { border-color:var(--brand); }
+    select.inp { cursor:pointer; }
+    .mini { color:var(--text-mute); font-size:0.8rem; }
+    .empty { color:var(--text-mute); font-size:0.9rem; padding:22px 4px; text-align:center; }
+    .err { display:none; color:var(--neg); font-size:0.82rem; font-weight:600; margin:6px 0; }
+    .err.show { display:block; }
+    .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    .fld label { display:block; font-size:0.78rem; font-weight:700; color:var(--text-soft); margin-bottom:5px; }
+    .drop { border:2px dashed var(--line-2); border-radius:14px; padding:26px 18px; text-align:center; color:var(--text-soft); background:#fafbfc; cursor:pointer; }
+    .drop.over { border-color:var(--brand); background:var(--brand-sft); }
+    .drop b { color:var(--text); }
+    .tbl-wrap { overflow-x:auto; }
+    .tbl.prev td, .tbl.prev th { padding:8px 10px; white-space:nowrap; font-size:0.85rem; }
+    .tbl.stat td, .tbl.stat th { padding:10px 12px; white-space:nowrap; }
+    .tbl.stat tr.team td { background:#fff8f2; font-weight:800; }
+    .tbl.stat tr.total td { background:var(--brand-sft); font-weight:800; border-top:2px solid rgba(255,106,0,.4); }
+    .tbl.stat td.coach { padding-left:26px; }
+    .rate { display:inline-flex; align-items:center; gap:8px; }
+    .rate .bar { display:inline-block; width:70px; min-width:70px; flex:none; }
+    .rate .fill { display:block; height:100%; background:var(--brand); border-radius:999px; }
+    .pill { font-size:0.76rem; font-weight:700; padding:3px 10px; border-radius:999px; display:inline-block; white-space:nowrap; }
+    .pill.warn { background:#ffd9bf; color:#9a3d00; }
+    .pill.ok { background:var(--pos-sft); color:#15803d; }
+    .cnt-grid { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+    .cnt { background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 12px; font-size:0.85rem; }
+    .cnt b { font-variant-numeric:tabular-nums; }
+    .wk-head { display:flex; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+    .wk-head h2 { font-size:1rem; font-weight:800; margin:0 4px; min-width:110px; text-align:center; }
+    .cal-nav { border:1px solid var(--line-2); background:#fff; border-radius:9px; width:32px; height:32px; cursor:pointer; font-size:1rem; font-family:inherit; }
+    .cal-today { border:1px solid var(--line-2); background:#fff; border-radius:9px; padding:0 12px; height:32px; cursor:pointer; font-size:0.82rem; font-weight:600; font-family:inherit; }
+    .del { border:none; background:none; color:var(--text-mute); cursor:pointer; font-size:1rem; padding:4px 7px; border-radius:8px; }
+    .del:hover { background:#fdecea; color:var(--neg); }
+    .step { display:none; margin-top:16px; }
+    .step.show { display:block; }
+  </style>
+<link rel="stylesheet" href="seoul-theme.css"></head>
+<body>
+  <div class="backdrop"></div>
+  <aside class="sidebar" id="sidebar" data-active="meeting_admin"></aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-toggle" aria-label="메뉴"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></button>
+        <div><h1>미팅 보드(관리자)</h1><div class="sub">배정 고객 파일 올리기 · 코치별 배정 고객 수</div></div>
+      </div>
+      <a class='btn btn-ghost' href='/meeting-board'>미팅 보드로</a>
+    </header>
+
+    <div class="content">
+      <div class="err" id="errBox"></div>
+
+      <!-- 1. 파일 올리기 -->
+      <div class="panel">
+        <div class="panel-head"><h2>배정 고객 파일 올리기</h2><span class="mini">xlsx · xls · csv</span></div>
+        <div class="panel-body" style="padding-top:16px;">
+          <div class="row" style="margin-bottom:12px;">
+            <div class="fld"><label>배정 월</label><input class="inp" type="month" id="uMonth"></div>
+            <div class="fld"><label>파일</label><input type="file" id="uFile" accept=".xlsx,.xls,.csv" style="font-family:inherit;"></div>
+          </div>
+          <div class="drop" id="drop">여기에 파일을 끌어다 놓아도 됩니다<br><span class="mini">고객 이름은 가운데 글자를 o로 가려서만 저장되고, 연락처 등 나머지 열은 저장하지 않습니다</span></div>
+
+          <div class="step" id="step2">
+            <div class="row" style="margin:14px 0 8px;">
+              <label class="mini" style="display:inline-flex; align-items:center; gap:6px;"><input type="checkbox" id="hasHeader" checked> 첫 줄이 제목 줄</label>
+              <span class="mini" id="fileInfo"></span>
+            </div>
+            <div class="row">
+              <div class="fld"><label>고객 이름 열</label><select class="inp" id="colCustomer"></select></div>
+              <div class="fld"><label>코치 열</label><select class="inp" id="colCoach"></select></div>
+              <div class="fld"><label>매니저 열 (없으면 비움)</label><select class="inp" id="colManager"></select></div>
+              <div class="fld"><label>메모 열 (없으면 비움)</label><select class="inp" id="colMemo"></select></div>
+            </div>
+            <div class="cnt-grid" id="prevCounts"></div>
+            <div class="tbl-wrap"><table class="tbl prev"><thead><tr><th>#</th><th>고객(가림)</th><th>코치</th><th>매니저</th><th>메모</th></tr></thead><tbody id="prevBody"></tbody></table></div>
+            <div class="row" style="margin-top:12px; justify-content:flex-end;">
+              <button class="btn btn-ghost" id="btnCancel">취소</button>
+              <button class="btn btn-brand" id="btnSave">저장</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 코치별 배정 고객 수 -->
+      <div class="panel">
+        <div class="panel-body" style="padding-top:18px;">
+          <div class="wk-head">
+            <div class="seg" id="statSeg">
+              <button data-s="month" class="active">월간</button>
+              <button data-s="all">총(누적)</button>
+            </div>
+            <span id="statNav" style="display:inline-flex; align-items:center; gap:8px;">
+              <button class="cal-nav" id="stPrev">‹</button>
+              <h2 id="stTitle"></h2>
+              <button class="cal-nav" id="stNext">›</button>
+              <button class="cal-today" id="stThis">이번 달</button>
+            </span>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl stat">
+              <thead><tr><th>팀 / 코치</th><th class="num">배정 고객</th><th class="num">활동</th><th class="num">실제활동</th><th>실제활동률</th></tr></thead>
+              <tbody id="statBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. 올린 파일 목록 -->
+      <div class="panel">
+        <div class="panel-head"><h2>올린 파일</h2><span class="mini" id="batchCount"></span></div>
+        <div class="panel-body">
+          <div class="tbl-wrap">
+            <table class="tbl"><thead><tr><th>올린 날짜</th><th>배정 월</th><th>파일</th><th class="num">고객 수</th><th></th></tr></thead><tbody id="batchBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="sb.js"></script>
+  <script>
+  (function () {
+    const auth = JSON.parse(localStorage.getItem('hwAuth') || 'null');
+    const ALLOWED_ROLES = ['boss', 'jijeom', 'team'];   // 관리자(대표님)·지점장(한채혁)·매니저(manager 계정). 사원(fc)·신입원은 못 봄
+    if (!auth || !ALLOWED_ROLES.includes(auth.role)) { alert('접근 권한이 없습니다.'); location.href = 'meeting-board.html'; return; }
+
+    const TEAMS = window.SEOUL_TEAMS;
+    const MANAGERS = Object.keys(TEAMS);
+    const COACHES = MANAGERS.flatMap(m => TEAMS[m]);
+    const COACH_MGR = {}; MANAGERS.forEach(m => TEAMS[m].forEach(c => { COACH_MGR[c] = m; }));
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const pad = n => String(n).padStart(2, '0');
+    const ymNow = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+    function maskName(s) { s = String(s || '').trim(); const ch = Array.from(s); if (ch.length < 2) return s; if (ch.length === 2) return ch[0] + 'o'; return ch[0] + 'o'.repeat(ch.length - 2) + ch[ch.length - 1]; }
+    function showErr(msg) { const e = $('errBox'); e.textContent = msg || ''; e.className = msg ? 'err show' : 'err'; }
+
+    /* ── 저장소 ── */
+    const mockC = Array.isArray(window.__MB_MOCK_CUST) ? window.__MB_MOCK_CUST.map((r, i) => Object.assign({ id: i + 1 }, r)) : null;
+    const mockB = Array.isArray(window.__MB_MOCK) ? window.__MB_MOCK.map((r, i) => Object.assign({ id: i + 1 }, r)) : null;
+    let seqC = mockC ? mockC.length + 1 : 0;
+    const store = {
+      async customers() { if (mockC) return mockC.slice(); const { data, error } = await SB.from('meeting_customers').select('*').order('uploaded_at', { ascending: false }); if (error) throw error; return data || []; },
+      async board() { if (mockB) return mockB.slice(); const { data, error } = await SB.from('meeting_board').select('date,coach,manager,met'); if (error) throw error; return data || []; },
+      async insertMany(recs) { if (mockC) { recs.forEach(r => mockC.push(Object.assign({ id: seqC++, uploaded_at: new Date().toISOString() }, r))); return; } const { error } = await SB.from('meeting_customers').insert(recs); if (error) throw error; },
+      async removeBatch(batchId) { if (mockC) { for (let i = mockC.length - 1; i >= 0; i--) if (mockC[i].batch_id === batchId) mockC.splice(i, 1); return; } const { error } = await SB.from('meeting_customers').delete().eq('batch_id', batchId); if (error) throw error; },
+    };
+
+    let customers = [], board = [];
+    let statMode = 'month';
+    let statCur = new Date(); statCur.setDate(1);
+    $('uMonth').value = ymNow();
+
+    /* ── 1. 파일 읽기 → 열 고르기 → 미리보기 ── */
+    let sheet = null;   // 2차원 배열
+    let fileName = '';
+    function readFile(file) {
+      if (!file) return;
+      fileName = file.name;
+      const fr = new FileReader();
+      fr.onload = e => {
+        try {
+          const bytes = new Uint8Array(e.target.result);
+          let wb;
+          if (/\.csv$/i.test(file.name)) {
+            // CSV 글자 깨짐 방지: UTF-8로 먼저 읽고, 안 되면 엑셀 한국어 저장 방식(EUC-KR)으로 읽는다
+            let text;
+            try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+            catch (_) { text = new TextDecoder('euc-kr').decode(bytes); }
+            wb = XLSX.read(text.replace(/^﻿/, ''), { type: 'string' });
+          } else {
+            wb = XLSX.read(bytes, { type: 'array' });
+          }
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          sheet = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }).filter(r => r.some(v => String(v).trim() !== ''));
+          if (!sheet.length) { showErr('파일에 내용이 없습니다.'); return; }
+          showErr('');
+          $('fileInfo').textContent = `${file.name} · ${sheet.length}줄 · 시트 "${wb.SheetNames[0]}"`;
+          buildColumnPickers();
+          $('step2').classList.add('show');
+        } catch (err) { showErr('파일을 읽지 못했습니다: ' + err.message); }
+      };
+      fr.readAsArrayBuffer(file);
+    }
+    $('uFile').addEventListener('change', e => readFile(e.target.files[0]));
+    const drop = $('drop');
+    drop.addEventListener('click', () => $('uFile').click());
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+    drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); readFile(e.dataTransfer.files[0]); });
+
+    const hasHeader = () => $('hasHeader').checked;
+    const headerRow = () => hasHeader() ? sheet[0] : sheet[0].map((_, i) => `${i + 1}번째 열`);
+    const dataRows = () => hasHeader() ? sheet.slice(1) : sheet;
+    function guessCol(names, pats) { const i = names.findIndex(n => pats.some(p => String(n).replace(/\s/g, '').includes(p))); return i; }
+    function buildColumnPickers() {
+      const names = headerRow();
+      const opts = (allowNone, sel) => (allowNone ? '<option value="">(없음)</option>' : '') + names.map((n, i) => `<option value="${i}" ${i === sel ? 'selected' : ''}>${esc(n || (i + 1) + '번째 열')}</option>`).join('');
+      const gC = guessCol(names, ['고객', '이름', '성명', '당사자']), gK = guessCol(names, ['코치', '담당']), gM = guessCol(names, ['매니저', '팀장']), gN = guessCol(names, ['메모', '비고']);
+      $('colCustomer').innerHTML = opts(false, gC >= 0 ? gC : 0);
+      $('colCoach').innerHTML = opts(false, gK >= 0 ? gK : Math.min(1, names.length - 1));
+      $('colManager').innerHTML = opts(true, gM >= 0 ? gM : -1);
+      $('colMemo').innerHTML = opts(true, gN >= 0 ? gN : -1);
+      renderPreview();
+    }
+    function parsedRows() {
+      const cC = Number($('colCustomer').value), cK = Number($('colCoach').value);
+      const cM = $('colManager').value === '' ? -1 : Number($('colManager').value), cN = $('colMemo').value === '' ? -1 : Number($('colMemo').value);
+      return dataRows().map(r => {
+        const coach = String(r[cK] || '').trim();
+        const manager = cM >= 0 ? String(r[cM] || '').trim() : (COACH_MGR[coach] || '');
+        return { customer: maskName(r[cC]), coach, manager, memo: cN >= 0 ? String(r[cN] || '').trim() : '' };
+      }).filter(r => r.customer || r.coach);
+    }
+    function renderPreview() {
+      if (!sheet) return;
+      const rows = parsedRows();
+      const byCoach = {}; rows.forEach(r => { byCoach[r.coach || '(코치 없음)'] = (byCoach[r.coach || '(코치 없음)'] || 0) + 1; });
+      $('prevCounts').innerHTML = `<div class="cnt">전체 <b>${rows.length}</b>명</div>` + Object.keys(byCoach).sort().map(c => `<div class="cnt">${esc(c)} <b>${byCoach[c]}</b>${c !== '(코치 없음)' && !COACHES.includes(c) ? ' <span class="pill warn">배정표에 없음</span>' : ''}</div>`).join('');
+      $('prevBody').innerHTML = rows.slice(0, 10).map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.customer)}</td><td>${esc(r.coach)}</td><td>${esc(r.manager)}</td><td>${esc(r.memo)}</td></tr>`).join('') + (rows.length > 10 ? `<tr><td colspan="5" class="mini">… 외 ${rows.length - 10}명</td></tr>` : '');
+    }
+    ['colCustomer', 'colCoach', 'colManager', 'colMemo'].forEach(id => $(id).addEventListener('change', renderPreview));
+    $('hasHeader').addEventListener('change', buildColumnPickers);
+    $('btnCancel').addEventListener('click', () => { sheet = null; $('uFile').value = ''; $('step2').classList.remove('show'); });
+    $('btnSave').addEventListener('click', async () => {
+      const month = $('uMonth').value;
+      if (!/^\d{4}-\d{2}$/.test(month)) { alert('배정 월을 골라주세요.'); return; }
+      const rows = parsedRows();
+      if (!rows.length) { alert('저장할 줄이 없습니다.'); return; }
+      if (!confirm(`${month} 배정 고객 ${rows.length}명을 저장할까요?`)) return;
+      const batch = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+      try {
+        showErr('');
+        await store.insertMany(rows.map(r => Object.assign({ batch_id: batch, file_name: fileName, month }, r)));
+        sheet = null; $('uFile').value = ''; $('step2').classList.remove('show');
+        await load();
+      } catch (err) { showErr('저장 실패: ' + (err.message || err)); }
+    });
+
+    /* ── 2. 코치별 배정 고객 수 ── */
+    function renderStat() {
+      let cust, act;
+      if (statMode === 'month') {
+        const ym = `${statCur.getFullYear()}-${pad(statCur.getMonth() + 1)}`;
+        $('stTitle').textContent = `${statCur.getFullYear()}년 ${statCur.getMonth() + 1}월`;
+        $('statNav').style.display = 'inline-flex';
+        cust = customers.filter(r => r.month === ym);
+        act = board.filter(r => String(r.date || '').slice(0, 7) === ym);
+      } else { $('statNav').style.display = 'none'; cust = customers.slice(); act = board.slice(); }
+      const agg = (cs, as) => ({ c: cs.length, n: as.length, met: as.filter(r => r.met === '예').length });
+      const rateHtml = a => a.n ? `<span class="rate"><span class="bar"><span class="fill" style="width:${Math.round(a.met / a.n * 100)}%"></span></span>${Math.round(a.met / a.n * 100)}%</span>` : '<span class="mini">-</span>';
+      const line = (label, a, cls) => `<tr class="${cls || ''}"><td class="${cls ? '' : 'coach'}">${esc(label)}</td><td class="num">${a.c}</td><td class="num">${a.n}</td><td class="num">${a.met}</td><td>${rateHtml(a)}</td></tr>`;
+      let h = ''; const seen = new Set();
+      MANAGERS.forEach(m => {
+        const inTeam = r => r.manager === m || TEAMS[m].includes(r.coach);
+        h += line(`${m} 팀`, agg(cust.filter(inTeam), act.filter(inTeam)), 'team');
+        TEAMS[m].forEach(c => { seen.add(c); h += line(c, agg(cust.filter(r => r.coach === c), act.filter(r => r.coach === c))); });
+      });
+      const others = [...new Set(cust.concat(act).map(r => r.coach).filter(c => c && !seen.has(c)))];
+      if (others.length) {
+        h += line('기타(배정표에 없는 코치)', agg(cust.filter(r => others.includes(r.coach)), act.filter(r => others.includes(r.coach))), 'team');
+        others.forEach(c => { h += line(c, agg(cust.filter(r => r.coach === c), act.filter(r => r.coach === c))); });
+      }
+      h += line('전체', agg(cust, act), 'total');
+      $('statBody').innerHTML = h;
+    }
+    $('statSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { statMode = b.dataset.s; $('statSeg').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b)); renderStat(); }));
+    $('stPrev').addEventListener('click', () => { statCur.setMonth(statCur.getMonth() - 1); renderStat(); });
+    $('stNext').addEventListener('click', () => { statCur.setMonth(statCur.getMonth() + 1); renderStat(); });
+    $('stThis').addEventListener('click', () => { statCur = new Date(); statCur.setDate(1); renderStat(); });
+
+    /* ── 3. 올린 파일 목록 ── */
+    function renderBatches() {
+      const map = {};
+      customers.forEach(r => { const b = map[r.batch_id] || (map[r.batch_id] = { id: r.batch_id, file: r.file_name, month: r.month, at: r.uploaded_at, n: 0 }); b.n++; if (r.uploaded_at > b.at) b.at = r.uploaded_at; });
+      const list = Object.values(map).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+      $('batchCount').textContent = `${list.length}개 · 고객 ${customers.length}명`;
+      $('batchBody').innerHTML = list.length ? list.map(b => `<tr><td>${esc(String(b.at || '').slice(0, 10))}</td><td>${esc(b.month)}</td><td>${esc(b.file)}</td><td class="num">${b.n}</td><td><button class="del" data-del="${esc(b.id)}" title="이 파일로 올린 고객 전부 삭제">🗑</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">아직 올린 파일이 없습니다.</td></tr>';
+    }
+    $('batchBody').addEventListener('click', async e => {
+      const b = e.target.closest('[data-del]'); if (!b) return;
+      const id = b.dataset.del; const n = customers.filter(r => r.batch_id === id).length;
+      if (!confirm(`이 파일로 올린 고객 ${n}명을 전부 지울까요?`)) return;
+      try { showErr(''); await store.removeBatch(id); await load(); } catch (err) { showErr('삭제 실패: ' + (err.message || err)); }
+    });
+
+    async function load() {
+      try {
+        showErr('');
+        [customers, board] = await Promise.all([store.customers(), store.board()]);
+        renderStat(); renderBatches();
+      } catch (err) { showErr('불러오기 실패: ' + (err.message || err)); }
+    }
+    load();
+  })();
+  </script>
+<script src="task-core.js"></script><script src="backup-core.js"></script><script src="seoul-app.js"></script></body>
+</html>
